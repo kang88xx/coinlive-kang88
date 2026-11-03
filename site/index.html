@@ -745,10 +745,11 @@ let markerT = 0;
 /* ------------------------------------------------------------------
    Avatars, built from primitives so walking/sitting keep working:
    - 'kim'  : stocky figure in a black Mao-style suit, flat-top hair with
-              shaved sides, thin rimless glasses, round face (the player)
+              shaved sides, thin rimless glasses, wide jowly face (the player)
    - 'hype' : black cap, black tee with a script logo, crossbody bag,
               denim shorts, red high-top sneakers, phone in hand (the NPC)
-   The face itself is a canvas texture on the head sphere.
+   Heads are sphere geometries re-shaped per character (squarer, jaw-weighted,
+   longer...), and the face is a canvas texture wrapped on that head.
    ------------------------------------------------------------------ */
 // suit shades: black, charcoal, ink navy, dark brown-black...
 const BODY = ['#141418', '#1c1c22', '#10141c', '#1e1a1a', '#17171d', '#121216'];
@@ -758,7 +759,7 @@ const LIMB = new T.CylinderGeometry(0.045, 0.038, 1, 10);
 const BOX = new T.BoxGeometry(1, 1, 1);
 const SKIN = '#f1cfae';
 const skinMat = new T.MeshStandardMaterial({ color: SKIN, roughness: 0.55 });
-const hairMat = new T.MeshStandardMaterial({ color: '#141210', roughness: 0.55 });
+const hairMat = new T.MeshStandardMaterial({ color: '#0e0c0a', roughness: 0.78 });
 const darkMat = new T.MeshStandardMaterial({ color: '#0d0c0b', roughness: 0.3 });
 const shoeMat = new T.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.25, metalness: 0.2 });
 const denimMat = new T.MeshStandardMaterial({ color: '#a9c4de', roughness: 0.9 });
@@ -783,149 +784,214 @@ function box(w, h, d, mat, x, y, z){
 function cyl(rt, rb, h, mat, x, y, z, seg){
   const m = new T.Mesh(new T.CylinderGeometry(rt, rb, h, seg || 24), mat); m.position.set(x, y, z); return m;
 }
+// a unit sphere pushed through a per-vertex shaping function (UVs stay equirectangular, so a face canvas still wraps it)
+function shaped(fn, wseg, hseg){
+  const g = new T.SphereGeometry(1, wseg || 36, hseg || 28), a = g.attributes.position, v = new T.Vector3();
+  for (let i = 0; i < a.count; i++){ v.fromBufferAttribute(a, i); fn(v); a.setXYZ(i, v.x, v.y, v.z); }
+  g.computeVertexNormals();
+  return g;
+}
+// superellipsoid rounding: n = 2 is the sphere, larger n squares the shape off
+function squarify(v, n){
+  const s = Math.pow(Math.pow(Math.abs(v.x), n) + Math.pow(Math.abs(v.y), n) + Math.pow(Math.abs(v.z), n), 1 / n);
+  v.multiplyScalar(1 / s);
+}
+const smooth = (a, b, t) => { t = Math.min(1, Math.max(0, (t - a) / (b - a))); return t * t * (3 - 2 * t); };
+// kim: squarer, wide below the cheekbones (jowls), a short flat chin, slightly flattened face
+const HEAD_KIM = shaped(v => {
+  squarify(v, 3.2);
+  const y = v.y, jowl = smooth(0.2, -0.4, y) * (1 - smooth(-0.65, -1, y));   // widest below the cheekbones
+  v.x *= 1.12 * (1 + 0.18 * jowl); v.z *= 0.96 * (1 + 0.06 * jowl);
+  if (y < 0) v.y *= 0.82;                  // short chin
+  if (y > 0.55) v.y = 0.55 + (y - 0.55) * 0.7;   // flatter crown under the hair block
+  if (v.z > 0) v.z *= 1 - 0.12 * v.z;       // flatter face plane
+});
+// hype: longer egg-shaped head, full cheeks, a slightly narrower rounded chin
+const HEAD_HYPE = shaped(v => {
+  squarify(v, 2.5);
+  const cheek = smooth(0.35, -0.2, v.y) * (1 - smooth(-0.55, -1, v.y));
+  const chin = 1 - 0.08 * smooth(-0.5, -1, v.y);
+  v.x *= 1.05 * (1 + 0.11 * cheek) * chin; v.z *= 0.98 * (1 + 0.05 * cheek); v.y *= 1.06;
+});
+// kim's hair: a boxy block, wider at the top than at the shaved line, flat on top, longer front to back
+const HAIR_KIM = shaped(v => {
+  squarify(v, 6.0);
+  const taper = 1 + 0.1 * v.y;
+  v.x *= taper; v.z *= taper;
+  if (v.y > 0) v.y *= 0.38;
+}, 32, 20);
 // a transparent decal (logo, letter) on a small plane
 function decal(draw, w, h, pw, ph){
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'));
   return new T.Mesh(new T.PlaneGeometry(pw, ph), new T.MeshBasicMaterial({ map: canvasTex(c), transparent: true, depthWrite: false }));
 }
-// the face: a 1024x512 equirectangular canvas wrapped on the head sphere; the front of the head is u = 0.25
+
+// the face: a 1024x512 equirectangular canvas wrapped on the head; the front of the head is x = 256, the equator y = 256
 function faceTexture(kind){
   const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
   const x = c.getContext('2d'), F = 256, kim = kind === 'kim';
   x.fillStyle = SKIN; x.fillRect(0, 0, 1024, 512);
-  if (kim){
-    // shaved sides and back: a stubble band under the hair block, the forehead left clear
-    x.fillStyle = 'rgba(70,58,52,0.32)';
-    x.fillRect(0, 60, F - 150, 125); x.fillRect(F + 150, 60, 1024 - F - 150, 125);
-  }
   x.lineCap = 'round'; x.lineJoin = 'round';
-  // brows: thick and straight for kim, lighter arcs for the hype kid
-  x.strokeStyle = '#2a211c'; x.lineWidth = kim ? 13 : 8;
+  const shade = (X, Y, rx, ry, a) => { x.fillStyle = 'rgba(150,95,70,' + a + ')'; x.beginPath(); x.ellipse(X, Y, rx, ry, 0, 0, Math.PI * 2); x.fill(); };
+  if (kim){
+    // shaved sides and back: dark stubble under the hair block; the forehead stays clear
+    x.fillStyle = 'rgba(60,50,45,0.42)';
+    x.fillRect(0, 40, F - 135, 150); x.fillRect(F + 135, 40, 1024 - F - 135, 150);
+    x.fillStyle = 'rgba(60,50,45,0.2)'; x.fillRect(F - 135, 40, 270, 60);
+    // full cheeks, jowls and a double chin
+    shade(F - 110, 300, 40, 34, 0.12); shade(F + 110, 300, 40, 34, 0.12);
+    shade(F, 392, 120, 22, 0.16); shade(F, 358, 70, 10, 0.1);
+  } else {
+    // dark short hair under the cap line, sideburns
+    x.fillStyle = '#1a1512';
+    x.fillRect(0, 0, 1024, 150);
+    x.fillRect(0, 150, F - 150, 40); x.fillRect(F + 150, 150, 1024 - F - 150, 40);
+    for (const sd of [1, -1]) x.fillRect(F + sd * 150 - (sd > 0 ? 0 : 26), 190, 26, 70);
+    shade(F, 368, 48, 18, 0.14);
+  }
+  // brows: thick, straight and low for kim; softer arcs for the hype kid
+  x.strokeStyle = '#231b17'; x.lineWidth = kim ? 11 : 9;
   for (const sd of [1, -1]){
     x.beginPath();
-    if (kim){ x.moveTo(F + sd * 34, 207); x.lineTo(F + sd * 98, 199); }
-    else { x.moveTo(F + sd * 34, 206); x.quadraticCurveTo(F + sd * 66, 194, F + sd * 96, 202); }
+    if (kim){ x.moveTo(F + sd * 28, 221); x.lineTo(F + sd * 88, 217); }
+    else { x.moveTo(F + sd * 32, 210); x.quadraticCurveTo(F + sd * 66, 198, F + sd * 98, 208); }
     x.stroke();
   }
-  // small narrow eyes
+  // eyes: small and narrow, heavy upper lids for kim
   for (const sd of [1, -1]){
-    x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(F + sd * 66, 236, 20, kim ? 7 : 8, 0, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#1a1411'; x.beginPath(); x.ellipse(F + sd * 68, 236, 8, kim ? 7 : 8, 0, 0, Math.PI * 2); x.fill();
-    x.strokeStyle = '#2a211c'; x.lineWidth = 3; x.beginPath(); x.moveTo(F + sd * 46, 232); x.quadraticCurveTo(F + sd * 66, 224, F + sd * 86, 234); x.stroke();
+    const ex = F + sd * (kim ? 58 : 64), ey = kim ? 246 : 240;
+    x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(ex, ey, kim ? 18 : 20, kim ? 4.5 : 8, 0, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#1a1411'; x.beginPath(); x.ellipse(ex + sd * 2, ey + 0.5, kim ? 6 : 8.5, kim ? 4 : 8, 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#2a211c'; x.lineWidth = kim ? 4 : 3; x.beginPath();
+    x.moveTo(ex - sd * (kim ? 19 : 22), ey - 1); x.quadraticCurveTo(ex, ey - (kim ? 5 : 11), ex + sd * (kim ? 19 : 22), ey + 2); x.stroke();
+    if (kim){ x.strokeStyle = 'rgba(120,80,60,0.45)'; x.lineWidth = 3; x.beginPath(); x.moveTo(ex - sd * 18, ey + 10); x.quadraticCurveTo(ex, ey + 16, ex + sd * 18, ey + 10); x.stroke(); }
   }
   // glasses: thin rimless-looking rectangles (kim) or chunky black frames (hype)
-  x.strokeStyle = kim ? 'rgba(40,36,34,0.9)' : '#111111'; x.lineWidth = kim ? 3 : 7;
-  for (const sd of [1, -1]){ rrect(x, F + sd * 66 - 51, 212, 102, 48, kim ? 10 : 8); x.stroke(); }
-  x.beginPath(); x.moveTo(F - 15, 228); x.lineTo(F + 15, 228); x.stroke();
-  x.beginPath(); x.moveTo(F - 117, 226); x.lineTo(F - 155, 221); x.moveTo(F + 117, 226); x.lineTo(F + 155, 221); x.stroke();
-  // nose shading and nostrils
-  x.strokeStyle = 'rgba(120,80,60,0.5)'; x.lineWidth = 4; x.beginPath(); x.moveTo(F - 8, 252); x.quadraticCurveTo(F - 16, 284, F - 2, 290); x.stroke();
-  x.fillStyle = 'rgba(120,80,60,0.45)';
-  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 14, 290, 7, 4, 0, 0, Math.PI * 2); x.fill(); }
-  // mouth: a smile with full-cheek lines (kim) or a neutral line with a faint moustache/goatee (hype)
-  x.strokeStyle = '#8f4f48'; x.lineWidth = kim ? 6 : 5; x.beginPath();
-  if (kim){ x.moveTo(F - 42, 318); x.quadraticCurveTo(F, 340, F + 42, 318); }
-  else { x.moveTo(F - 30, 324); x.quadraticCurveTo(F, 330, F + 30, 324); }
+  x.strokeStyle = kim ? 'rgba(45,40,38,0.85)' : '#111111'; x.lineWidth = kim ? 3 : 11;
+  if (kim){
+    for (const sd of [1, -1]){ rrect(x, F + sd * 58 - 44, 226, 88, 38, 6); x.stroke(); }
+    x.beginPath(); x.moveTo(F - 14, 240); x.lineTo(F + 14, 240); x.stroke();
+    x.beginPath(); x.moveTo(F - 102, 240); x.lineTo(F - 140, 234); x.moveTo(F + 102, 240); x.lineTo(F + 140, 234); x.stroke();
+  } else {
+    for (const sd of [1, -1]){ rrect(x, F + sd * 64 - 52, 214, 104, 58, 10); x.stroke(); }
+    x.beginPath(); x.moveTo(F - 12, 240); x.lineTo(F + 12, 240); x.stroke();
+    x.beginPath(); x.moveTo(F - 116, 236); x.lineTo(F - 152, 228); x.moveTo(F + 116, 236); x.lineTo(F + 152, 228); x.stroke();
+  }
+  // nose: broader for kim
+  x.strokeStyle = 'rgba(120,80,60,0.5)'; x.lineWidth = 4; x.beginPath(); x.moveTo(F - 8, 254); x.quadraticCurveTo(F - 18, 286, F - 4, 294); x.stroke();
+  x.fillStyle = 'rgba(120,80,60,0.5)';
+  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * (kim ? 17 : 14), 294, kim ? 8 : 7, 4, 0, 0, Math.PI * 2); x.fill(); }
+  // mouth
+  x.strokeStyle = '#8a4a44'; x.lineWidth = kim ? 4 : 5; x.beginPath();
+  if (kim){ x.moveTo(F - 34, 328); x.quadraticCurveTo(F, 338, F + 34, 328); }
+  else { x.moveTo(F - 28, 328); x.quadraticCurveTo(F, 334, F + 28, 328); }
   x.stroke();
   if (kim){
     x.strokeStyle = 'rgba(120,80,60,0.35)'; x.lineWidth = 4;
-    for (const sd of [1, -1]){ x.beginPath(); x.moveTo(F + sd * 32, 288); x.quadraticCurveTo(F + sd * 60, 318, F + sd * 48, 340); x.stroke(); }
+    for (const sd of [1, -1]){ x.beginPath(); x.moveTo(F + sd * 28, 296); x.quadraticCurveTo(F + sd * 60, 322, F + sd * 50, 344); x.stroke(); }
   } else {
-    x.fillStyle = 'rgba(40,30,25,0.22)';
-    x.beginPath(); x.ellipse(F, 350, 40, 16, 0, 0, Math.PI * 2); x.fill();
-    x.beginPath(); x.ellipse(F, 308, 34, 7, 0, 0, Math.PI * 2); x.fill();
+    // moustache and goatee shadow
+    x.fillStyle = 'rgba(35,28,24,0.28)';
+    x.beginPath(); x.ellipse(F, 312, 36, 7, 0, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.ellipse(F, 356, 34, 18, 0, 0, Math.PI * 2); x.fill();
   }
-  x.fillStyle = 'rgba(230,120,100,0.14)';
-  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 96, 286, 30, 18, 0, 0, Math.PI * 2); x.fill(); }
+  x.fillStyle = 'rgba(230,120,100,0.13)';
+  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 100, 290, 30, 18, 0, 0, Math.PI * 2); x.fill(); }
   return canvasTex(c);
 }
 
 function makeFigure(kind, hex, isMe){
   const kim = kind === 'kim';
-  const top = new T.MeshStandardMaterial({ color: hex, roughness: kim ? 0.78 : 0.88, metalness: 0.02 });
-  const faceMat = new T.MeshStandardMaterial({ map: faceTexture(kind), roughness: 0.55 });
+  const top = new T.MeshStandardMaterial({ color: hex, roughness: 0.9, metalness: 0 });
+  const faceMat = new T.MeshStandardMaterial({ map: faceTexture(kind), roughness: 0.6 });
   const g = new T.Group(), body = new T.Group(); g.add(body);
   const legs = [], knees = [], arms = [];
   // legs: thigh at the hip, shin under a knee joint; suit trousers + black shoes, or denim shorts + socks + sneakers
   for (const side of [1, -1]){
-    const leg = new T.Group(); leg.position.set(0.13 * side, HIP, 0);
-    leg.add(limb(THIGH, kim ? top : denimMat, kim ? 2.4 : 2.8));
+    const leg = new T.Group(); leg.position.set((kim ? 0.16 : 0.17) * side, HIP, 0);
+    leg.add(limb(THIGH, kim ? top : denimMat, kim ? 2.6 : 3.2));
     const knee = new T.Group(); knee.position.y = -THIGH; leg.add(knee);
-    knee.add(limb(SHIN, kim ? top : skinMat, kim ? 2.1 : 1.75));
+    knee.add(limb(SHIN, kim ? top : skinMat, kim ? 2.3 : 1.8));
     if (kim) knee.add(ball(0.085, shoeMat, 0, -SHIN + 0.02, 0.05, 1, 0.55, 1.7));
     else {
-      knee.add(cyl(0.062, 0.062, 0.08, whiteMat, 0, -SHIN + 0.1, 0, 12));
-      knee.add(ball(0.09, redMat, 0, -SHIN + 0.03, 0.04, 1, 0.75, 1.6));
-      knee.add(ball(0.072, whiteMat, 0, -SHIN + 0.005, 0.12, 1, 0.55, 1.1));
-      knee.add(ball(0.092, shoeMat, 0, -SHIN - 0.012, 0.045, 1.05, 0.22, 1.72));
+      knee.add(cyl(0.064, 0.064, 0.08, whiteMat, 0, -SHIN + 0.1, 0, 12));
+      knee.add(ball(0.092, redMat, 0, -SHIN + 0.03, 0.04, 1, 0.75, 1.65));
+      knee.add(ball(0.074, whiteMat, 0, -SHIN + 0.005, 0.125, 1, 0.55, 1.1));
+      knee.add(ball(0.094, shoeMat, 0, -SHIN - 0.012, 0.045, 1.05, 0.22, 1.75));
     }
     body.add(leg); legs.push(leg); knees.push(knee);
   }
-  // torso: broad chest over a round belly, with a hem so the jacket/tee reads as a garment over the legs
-  body.add(ball(1, top, 0, HIP + 0.36, 0, 0.33, 0.33, 0.25));
-  const abd = new T.Group(); abd.position.set(0, HIP + 0.12, 0.03); body.add(abd);
-  abd.add(ball(1, top, 0, 0, 0, 0.31, 0.25, 0.28));
-  body.add(cyl(kim ? 0.3 : 0.29, kim ? 0.34 : 0.3, kim ? 0.14 : 0.1, top, 0, HIP + (kim ? 0 : 0.02), 0.02));
+  // torso: kim is widest at the belly with sloping shoulders; the hype kid is a big round tee
   if (kim){
+    body.add(ball(1, top, 0, HIP + 0.38, 0, 0.36, 0.3, 0.25));
+    const abd = new T.Group(); abd.position.set(0, HIP + 0.14, 0.03); body.add(abd);
+    abd.add(ball(1, top, 0, 0, 0, 0.38, 0.28, 0.3));
+    body.add(cyl(0.35, 0.38, 0.14, top, 0, HIP - 0.01, 0.02));
     // Mao collar, button column, chest and hip pocket flaps
-    body.add(cyl(0.115, 0.125, 0.09, top, 0, HIP + 0.62, 0.01, 16));
+    body.add(cyl(0.12, 0.13, 0.1, top, 0, HIP + 0.6, 0.01, 16));
     for (let i = 0; i < 5; i++){
-      const y = HIP + 0.56 - i * 0.11;
-      const z = i < 3 ? 0.25 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.36)) / 0.33) ** 2)) : 0.28 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.12)) / 0.25) ** 2)) + 0.03;
+      const y = HIP + 0.55 - i * 0.11;
+      const z = i < 3 ? 0.25 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.38)) / 0.3) ** 2)) : 0.3 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.14)) / 0.28) ** 2)) + 0.03;
       body.add(ball(0.016, darkMat, 0, y, z + 0.004));
     }
     for (const side of [1, -1]){
-      body.add(box(0.11, 0.035, 0.012, top, 0.14 * side, HIP + 0.47, 0.235));
-      body.add(ball(0.009, darkMat, 0.14 * side, HIP + 0.455, 0.245));
-      body.add(box(0.13, 0.04, 0.012, top, 0.17 * side, HIP + 0.1, 0.27));
+      body.add(box(0.11, 0.035, 0.012, top, 0.14 * side, HIP + 0.47, 0.233));
+      body.add(ball(0.009, darkMat, 0.14 * side, HIP + 0.455, 0.243));
+      body.add(box(0.13, 0.04, 0.012, top, 0.18 * side, HIP + 0.1, 0.285));
     }
+    body.userData.abd = abd;
   } else {
+    body.add(ball(1, top, 0, HIP + 0.36, 0, 0.38, 0.33, 0.27));
+    const abd = new T.Group(); abd.position.set(0, HIP + 0.12, 0.03); body.add(abd);
+    abd.add(ball(1, top, 0, 0, 0, 0.39, 0.25, 0.29));
+    body.add(cyl(0.33, 0.35, 0.1, top, 0, HIP + 0.02, 0.02));
     // script logo across the chest, crossbody strap and bag
     const logo = decal(x => {
       x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.font = 'italic 700 150px ' + UI; x.translate(256, 100); x.rotate(-0.12); x.fillText('Stüssy', 0, 0);
     }, 512, 200, 0.34, 0.133);
-    logo.position.set(0, HIP + 0.4, 0.257); body.add(logo);
-    const strap = box(0.045, 0.82, 0.016, bagMat, 0.02, HIP + 0.36, 0.262); strap.rotation.z = -0.62; body.add(strap);
-    const strapBack = box(0.045, 0.82, 0.016, bagMat, 0.02, HIP + 0.36, -0.255); strapBack.rotation.z = 0.62; body.add(strapBack);
-    body.add(box(0.2, 0.15, 0.09, bagMat, 0.14, HIP + 0.13, 0.3));
-    body.add(box(0.2, 0.05, 0.095, darkMat, 0.14, HIP + 0.18, 0.3));
+    logo.position.set(0, HIP + 0.4, 0.272); body.add(logo);
+    const strap = box(0.045, 0.84, 0.016, bagMat, 0.02, HIP + 0.36, 0.28); strap.rotation.z = -0.62; body.add(strap);
+    const strapBack = box(0.045, 0.84, 0.016, bagMat, 0.02, HIP + 0.36, -0.275); strapBack.rotation.z = 0.62; body.add(strapBack);
+    body.add(box(0.2, 0.15, 0.09, bagMat, 0.15, HIP + 0.13, 0.31));
+    body.add(box(0.2, 0.05, 0.095, darkMat, 0.15, HIP + 0.18, 0.31));
+    body.userData.abd = abd;
   }
+  const abd = body.userData.abd;
   // arms: the shoulder tilt sits on the parent so the walk swing on the child stays clean
   for (const side of [1, -1]){
-    const shoulder = new T.Group(); shoulder.position.set(0.33 * side, HIP + 0.52, 0); shoulder.rotation.z = 0.16 * side;
+    const shoulder = new T.Group(); shoulder.position.set((kim ? 0.35 : 0.38) * side, HIP + (kim ? 0.5 : 0.52), 0); shoulder.rotation.z = (kim ? 0.14 : 0.18) * side;
     const arm = new T.Group();
-    arm.add(limb(0.32, top, kim ? 1.9 : 2.3));
+    arm.add(limb(0.32, top, kim ? 2.0 : 2.4));
+    if (!kim) arm.add(cyl(0.1, 0.095, 0.16, top, 0, -0.07, 0, 14));   // short sleeve
     const elbow = new T.Group(); elbow.position.y = -0.32; elbow.rotation.x = kim ? -0.18 : (side < 0 ? -0.9 : -0.18); arm.add(elbow);
-    elbow.add(limb(0.28, kim ? top : skinMat, 1.7));
-    elbow.add(ball(0.055, skinMat, 0, -0.3, 0, 1, 1.15, 0.8));
+    elbow.add(limb(0.28, kim ? top : skinMat, 1.75));
+    elbow.add(ball(0.056, skinMat, 0, -0.3, 0, 1, 1.15, 0.8));
     if (!kim && side < 0){ const ph = box(0.05, 0.1, 0.01, phoneMat, 0, -0.33, 0.045); ph.rotation.x = -0.5; elbow.add(ph); }
     shoulder.add(arm); body.add(shoulder); arms.push(arm);
   }
-  // head on a short neck; pivot at the neck so nods look right; the face is a texture
-  body.add(cyl(0.06, 0.07, 0.12, skinMat, 0, HIP + 0.64, 0, 12));
-  const head = new T.Group(); head.position.set(0, HIP + 0.66, 0); body.add(head);
-  const face = new T.Group(); face.scale.setScalar(1.14); head.add(face);
+  // head: kim's sits low on a thick short neck; the shaped head geometry carries the face texture
+  body.add(cyl(kim ? 0.085 : 0.06, kim ? 0.1 : 0.07, 0.12, skinMat, 0, HIP + (kim ? 0.62 : 0.64), 0, 12));
+  const head = new T.Group(); head.position.set(0, HIP + (kim ? 0.62 : 0.66), 0); body.add(head);
+  const face = new T.Group(); face.scale.setScalar(kim ? 1.16 : 1.1); head.add(face);
   const R = 0.165;
-  face.add(ball(R, faceMat, 0, 0.17, 0, 1.06, 1.0, 1.0));
-  face.add(ball(0.026, skinMat, 0, 0.158, 0.168, 1, 0.9, 1));                       // nose tip
-  for (const side of [1, -1]) face.add(ball(0.03, skinMat, 0.168 * side, 0.17, -0.01, 0.5, 1, 0.8));   // ears
-  for (const side of [1, -1]){ const tp = box(0.07, 0.006, 0.006, darkMat, 0.14 * side, 0.205, 0.12); tp.rotation.y = -1.1 * side; face.add(tp); }   // glasses temples
+  const skull = new T.Mesh(kim ? HEAD_KIM : HEAD_HYPE, faceMat); skull.scale.setScalar(R); skull.position.set(0, 0.17, 0); face.add(skull);
+  face.add(ball(kim ? 0.024 : 0.022, skinMat, 0, kim ? 0.152 : 0.158, kim ? 0.162 : 0.165, 1.1, 0.8, 0.9));   // nose tip
+  for (const side of [1, -1]) face.add(ball(0.03, skinMat, (kim ? 0.18 : 0.172) * side, 0.17, -0.01, 0.5, 1, 0.8));   // ears
+  for (const side of [1, -1]){ const tp = box(0.07, 0.006, 0.006, darkMat, (kim ? 0.15 : 0.14) * side, 0.21, 0.12); tp.rotation.y = -1.1 * side; face.add(tp); }   // glasses temples
   if (kim){
-    // full cheeks and a double chin; hair: a tall flat-topped block, wider at the top than the shaved line, with a raised front
-    face.add(ball(0.1, skinMat, 0, 0.045, 0.07, 1.35, 0.45, 0.95));
-    face.add(cyl(0.188, 0.15, 0.12, hairMat, 0, 0.32, -0.012, 28));
-    face.add(ball(0.188, hairMat, 0, 0.38, -0.012, 1, 0.3, 1));
-    face.add(box(0.15, 0.05, 0.06, hairMat, 0, 0.395, 0.115));
+    // the cut: a trapezoid block of hair standing on a high shaved line, longer front-to-back, with a swept-up front
+    const hair = new T.Mesh(HAIR_KIM, hairMat); hair.scale.set(0.175, 0.085, 0.165); hair.position.set(0, 0.33, -0.025); face.add(hair);
+    const front = new T.Mesh(HAIR_KIM, hairMat); front.scale.set(0.145, 0.03, 0.055); front.position.set(0, 0.351, 0.105); front.rotation.x = -0.12; face.add(front);
   } else {
-    // black cap: dome, band, brim and a white S on the front; a little hair shows under the band
-    face.add(ball(0.17, hairMat, 0, 0.19, 0, 1.0, 0.8, 1.0));
-    const dome = new T.Mesh(DOME, capMat); dome.scale.setScalar(0.184); dome.position.set(0, 0.235, 0); face.add(dome);
-    face.add(cyl(0.185, 0.185, 0.05, capMat, 0, 0.235, 0, 28));
-    const brim = box(0.2, 0.014, 0.15, capMat, 0, 0.245, 0.215); brim.rotation.x = -0.08; face.add(brim);
+    // black cap: dome, band, half-disc brim and a white S on the front
+    const dome = new T.Mesh(DOME, capMat); dome.scale.set(0.186, 0.17, 0.186); dome.position.set(0, 0.235, 0); face.add(dome);
+    face.add(cyl(0.187, 0.187, 0.05, capMat, 0, 0.237, 0, 28));
+    const brim = new T.Mesh(new T.CylinderGeometry(0.2, 0.2, 0.014, 24, 1, false, -Math.PI / 2, Math.PI), capMat);
+    brim.position.set(0, 0.228, 0.04); brim.rotation.x = -0.12; face.add(brim);
     const S = decal(x => { x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = '800 100px ' + UI; x.fillText('S', 64, 68); }, 128, 128, 0.08, 0.08);
-    S.position.set(0, 0.315, 0.168); S.rotation.x = -0.5; face.add(S);
+    S.position.set(0, 0.32, 0.17); S.rotation.x = -0.5; face.add(S);
   }
   const shadow = new T.Mesh(SHADOW_GEO, shadowMat); shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.012; shadow.userData.noPick = true; g.add(shadow);
   if (isMe){
