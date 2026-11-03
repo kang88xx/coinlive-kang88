@@ -743,21 +743,30 @@ marker.rotation.x = -Math.PI / 2; marker.position.y = 0.02; scene.add(marker);
 let markerT = 0;
 
 /* ------------------------------------------------------------------
-   Avatars: a stocky figure in a black Mao-style suit (high collar, button
-   column, chest pockets), flat-top haircut with shaved sides, glasses.
-   Built from primitives like the old ant so walking/sitting keep working.
+   Avatars, built from primitives so walking/sitting keep working:
+   - 'kim'  : stocky figure in a black Mao-style suit, flat-top hair with
+              shaved sides, thin rimless glasses, round face (the player)
+   - 'hype' : black cap, black tee with a script logo, crossbody bag,
+              denim shorts, red high-top sneakers, phone in hand (the NPC)
+   The face itself is a canvas texture on the head sphere.
    ------------------------------------------------------------------ */
 // suit shades: black, charcoal, ink navy, dark brown-black...
 const BODY = ['#141418', '#1c1c22', '#10141c', '#1e1a1a', '#17171d', '#121216'];
-const SPH = new T.SphereGeometry(1, 24, 16);
+const SPH = new T.SphereGeometry(1, 28, 20);
+const DOME = new T.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
 const LIMB = new T.CylinderGeometry(0.045, 0.038, 1, 10);
 const BOX = new T.BoxGeometry(1, 1, 1);
-const RING = new T.TorusGeometry(0.036, 0.006, 8, 24);
-const skinMat = new T.MeshStandardMaterial({ color: '#f1cfae', roughness: 0.55 });
-const hairMat = new T.MeshStandardMaterial({ color: '#15120f', roughness: 0.6 });
+const SKIN = '#f1cfae';
+const skinMat = new T.MeshStandardMaterial({ color: SKIN, roughness: 0.55 });
+const hairMat = new T.MeshStandardMaterial({ color: '#141210', roughness: 0.55 });
 const darkMat = new T.MeshStandardMaterial({ color: '#0d0c0b', roughness: 0.3 });
 const shoeMat = new T.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.25, metalness: 0.2 });
-const mouthMat = new T.MeshStandardMaterial({ color: '#9a5a52', roughness: 0.6 });
+const denimMat = new T.MeshStandardMaterial({ color: '#a9c4de', roughness: 0.9 });
+const capMat = new T.MeshStandardMaterial({ color: '#111111', roughness: 0.7 });
+const bagMat = new T.MeshStandardMaterial({ color: '#151515', roughness: 0.6 });
+const whiteMat = new T.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.5 });
+const redMat = new T.MeshStandardMaterial({ color: '#d8232a', roughness: 0.45 });
+const phoneMat = new T.MeshStandardMaterial({ color: '#ff7b2a', roughness: 0.35 });
 const shadowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: '#000000', transparent: true, opacity: 0.55, depthWrite: false });
 const SHADOW_GEO = new T.PlaneGeometry(1.3, 1.3);
 const HIP = 0.74, THIGH = 0.37, SHIN = 0.36;
@@ -771,72 +780,159 @@ function limb(len, mat, radius){
 function box(w, h, d, mat, x, y, z){
   const m = new T.Mesh(BOX, mat); m.scale.set(w, h, d); m.position.set(x, y, z); return m;
 }
-function makeAnt(suitHex, isMe){
-  const suit = new T.MeshStandardMaterial({ color: suitHex, roughness: 0.78, metalness: 0.02 });
+function cyl(rt, rb, h, mat, x, y, z, seg){
+  const m = new T.Mesh(new T.CylinderGeometry(rt, rb, h, seg || 24), mat); m.position.set(x, y, z); return m;
+}
+// a transparent decal (logo, letter) on a small plane
+function decal(draw, w, h, pw, ph){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'));
+  return new T.Mesh(new T.PlaneGeometry(pw, ph), new T.MeshBasicMaterial({ map: canvasTex(c), transparent: true, depthWrite: false }));
+}
+// the face: a 1024x512 equirectangular canvas wrapped on the head sphere; the front of the head is u = 0.25
+function faceTexture(kind){
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const x = c.getContext('2d'), F = 256, kim = kind === 'kim';
+  x.fillStyle = SKIN; x.fillRect(0, 0, 1024, 512);
+  if (kim){
+    // shaved sides and back: a stubble band under the hair block, the forehead left clear
+    x.fillStyle = 'rgba(70,58,52,0.32)';
+    x.fillRect(0, 60, F - 150, 125); x.fillRect(F + 150, 60, 1024 - F - 150, 125);
+  }
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  // brows: thick and straight for kim, lighter arcs for the hype kid
+  x.strokeStyle = '#2a211c'; x.lineWidth = kim ? 13 : 8;
+  for (const sd of [1, -1]){
+    x.beginPath();
+    if (kim){ x.moveTo(F + sd * 34, 207); x.lineTo(F + sd * 98, 199); }
+    else { x.moveTo(F + sd * 34, 206); x.quadraticCurveTo(F + sd * 66, 194, F + sd * 96, 202); }
+    x.stroke();
+  }
+  // small narrow eyes
+  for (const sd of [1, -1]){
+    x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(F + sd * 66, 236, 20, kim ? 7 : 8, 0, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#1a1411'; x.beginPath(); x.ellipse(F + sd * 68, 236, 8, kim ? 7 : 8, 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#2a211c'; x.lineWidth = 3; x.beginPath(); x.moveTo(F + sd * 46, 232); x.quadraticCurveTo(F + sd * 66, 224, F + sd * 86, 234); x.stroke();
+  }
+  // glasses: thin rimless-looking rectangles (kim) or chunky black frames (hype)
+  x.strokeStyle = kim ? 'rgba(40,36,34,0.9)' : '#111111'; x.lineWidth = kim ? 3 : 7;
+  for (const sd of [1, -1]){ rrect(x, F + sd * 66 - 51, 212, 102, 48, kim ? 10 : 8); x.stroke(); }
+  x.beginPath(); x.moveTo(F - 15, 228); x.lineTo(F + 15, 228); x.stroke();
+  x.beginPath(); x.moveTo(F - 117, 226); x.lineTo(F - 155, 221); x.moveTo(F + 117, 226); x.lineTo(F + 155, 221); x.stroke();
+  // nose shading and nostrils
+  x.strokeStyle = 'rgba(120,80,60,0.5)'; x.lineWidth = 4; x.beginPath(); x.moveTo(F - 8, 252); x.quadraticCurveTo(F - 16, 284, F - 2, 290); x.stroke();
+  x.fillStyle = 'rgba(120,80,60,0.45)';
+  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 14, 290, 7, 4, 0, 0, Math.PI * 2); x.fill(); }
+  // mouth: a smile with full-cheek lines (kim) or a neutral line with a faint moustache/goatee (hype)
+  x.strokeStyle = '#8f4f48'; x.lineWidth = kim ? 6 : 5; x.beginPath();
+  if (kim){ x.moveTo(F - 42, 318); x.quadraticCurveTo(F, 340, F + 42, 318); }
+  else { x.moveTo(F - 30, 324); x.quadraticCurveTo(F, 330, F + 30, 324); }
+  x.stroke();
+  if (kim){
+    x.strokeStyle = 'rgba(120,80,60,0.35)'; x.lineWidth = 4;
+    for (const sd of [1, -1]){ x.beginPath(); x.moveTo(F + sd * 32, 288); x.quadraticCurveTo(F + sd * 60, 318, F + sd * 48, 340); x.stroke(); }
+  } else {
+    x.fillStyle = 'rgba(40,30,25,0.22)';
+    x.beginPath(); x.ellipse(F, 350, 40, 16, 0, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.ellipse(F, 308, 34, 7, 0, 0, Math.PI * 2); x.fill();
+  }
+  x.fillStyle = 'rgba(230,120,100,0.14)';
+  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 96, 286, 30, 18, 0, 0, Math.PI * 2); x.fill(); }
+  return canvasTex(c);
+}
+
+function makeFigure(kind, hex, isMe){
+  const kim = kind === 'kim';
+  const top = new T.MeshStandardMaterial({ color: hex, roughness: kim ? 0.78 : 0.88, metalness: 0.02 });
+  const faceMat = new T.MeshStandardMaterial({ map: faceTexture(kind), roughness: 0.55 });
   const g = new T.Group(), body = new T.Group(); g.add(body);
   const legs = [], knees = [], arms = [];
-  // legs: thigh at the hip, shin under a knee joint, black shoe
+  // legs: thigh at the hip, shin under a knee joint; suit trousers + black shoes, or denim shorts + socks + sneakers
   for (const side of [1, -1]){
     const leg = new T.Group(); leg.position.set(0.13 * side, HIP, 0);
-    leg.add(limb(THIGH, suit, 2.4));
+    leg.add(limb(THIGH, kim ? top : denimMat, kim ? 2.4 : 2.8));
     const knee = new T.Group(); knee.position.y = -THIGH; leg.add(knee);
-    knee.add(limb(SHIN, suit, 2.1));
-    knee.add(ball(0.085, shoeMat, 0, -SHIN + 0.02, 0.05, 1, 0.55, 1.7));
+    knee.add(limb(SHIN, kim ? top : skinMat, kim ? 2.1 : 1.75));
+    if (kim) knee.add(ball(0.085, shoeMat, 0, -SHIN + 0.02, 0.05, 1, 0.55, 1.7));
+    else {
+      knee.add(cyl(0.062, 0.062, 0.08, whiteMat, 0, -SHIN + 0.1, 0, 12));
+      knee.add(ball(0.09, redMat, 0, -SHIN + 0.03, 0.04, 1, 0.75, 1.6));
+      knee.add(ball(0.072, whiteMat, 0, -SHIN + 0.005, 0.12, 1, 0.55, 1.1));
+      knee.add(ball(0.092, shoeMat, 0, -SHIN - 0.012, 0.045, 1.05, 0.22, 1.72));
+    }
     body.add(leg); legs.push(leg); knees.push(knee);
   }
-  // torso: broad chest over a round belly
-  body.add(ball(1, suit, 0, HIP + 0.36, 0, 0.33, 0.33, 0.25));
+  // torso: broad chest over a round belly, with a hem so the jacket/tee reads as a garment over the legs
+  body.add(ball(1, top, 0, HIP + 0.36, 0, 0.33, 0.33, 0.25));
   const abd = new T.Group(); abd.position.set(0, HIP + 0.12, 0.03); body.add(abd);
-  abd.add(ball(1, suit, 0, 0, 0, 0.31, 0.25, 0.28));
-  // Mao collar, button column and two chest pockets
-  const collar = new T.Mesh(new T.CylinderGeometry(0.115, 0.125, 0.09, 16), suit); collar.position.set(0, HIP + 0.62, 0.01); body.add(collar);
-  for (let i = 0; i < 5; i++){
-    const y = HIP + 0.56 - i * 0.11, dy = (y - (HIP + 0.34)) / 0.30;
-    const z = i < 3 ? 0.27 * Math.sqrt(Math.max(0, 1 - dy * dy)) : 0.29 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.12)) / 0.26) ** 2)) + 0.02;
-    body.add(ball(0.016, darkMat, 0, y, z + 0.004));
+  abd.add(ball(1, top, 0, 0, 0, 0.31, 0.25, 0.28));
+  body.add(cyl(kim ? 0.3 : 0.29, kim ? 0.34 : 0.3, kim ? 0.14 : 0.1, top, 0, HIP + (kim ? 0 : 0.02), 0.02));
+  if (kim){
+    // Mao collar, button column, chest and hip pocket flaps
+    body.add(cyl(0.115, 0.125, 0.09, top, 0, HIP + 0.62, 0.01, 16));
+    for (let i = 0; i < 5; i++){
+      const y = HIP + 0.56 - i * 0.11;
+      const z = i < 3 ? 0.25 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.36)) / 0.33) ** 2)) : 0.28 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.12)) / 0.25) ** 2)) + 0.03;
+      body.add(ball(0.016, darkMat, 0, y, z + 0.004));
+    }
+    for (const side of [1, -1]){
+      body.add(box(0.11, 0.035, 0.012, top, 0.14 * side, HIP + 0.47, 0.235));
+      body.add(ball(0.009, darkMat, 0.14 * side, HIP + 0.455, 0.245));
+      body.add(box(0.13, 0.04, 0.012, top, 0.17 * side, HIP + 0.1, 0.27));
+    }
+  } else {
+    // script logo across the chest, crossbody strap and bag
+    const logo = decal(x => {
+      x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'italic 700 150px ' + UI; x.translate(256, 100); x.rotate(-0.12); x.fillText('Stüssy', 0, 0);
+    }, 512, 200, 0.34, 0.133);
+    logo.position.set(0, HIP + 0.4, 0.257); body.add(logo);
+    const strap = box(0.045, 0.82, 0.016, bagMat, 0.02, HIP + 0.36, 0.262); strap.rotation.z = -0.62; body.add(strap);
+    const strapBack = box(0.045, 0.82, 0.016, bagMat, 0.02, HIP + 0.36, -0.255); strapBack.rotation.z = 0.62; body.add(strapBack);
+    body.add(box(0.2, 0.15, 0.09, bagMat, 0.14, HIP + 0.13, 0.3));
+    body.add(box(0.2, 0.05, 0.095, darkMat, 0.14, HIP + 0.18, 0.3));
   }
-  for (const side of [1, -1]){
-    body.add(box(0.11, 0.035, 0.012, suit, 0.14 * side, HIP + 0.47, 0.245));
-    body.add(ball(0.009, darkMat, 0.14 * side, HIP + 0.455, 0.255));
-  }
-  // arms: shoulder tilt is on the parent so the walk swing on the child stays clean
+  // arms: the shoulder tilt sits on the parent so the walk swing on the child stays clean
   for (const side of [1, -1]){
     const shoulder = new T.Group(); shoulder.position.set(0.33 * side, HIP + 0.52, 0); shoulder.rotation.z = 0.16 * side;
     const arm = new T.Group();
-    arm.add(limb(0.32, suit, 1.9));
-    const elbow = new T.Group(); elbow.position.y = -0.32; elbow.rotation.x = -0.18; arm.add(elbow);
-    elbow.add(limb(0.28, suit, 1.7));
+    arm.add(limb(0.32, top, kim ? 1.9 : 2.3));
+    const elbow = new T.Group(); elbow.position.y = -0.32; elbow.rotation.x = kim ? -0.18 : (side < 0 ? -0.9 : -0.18); arm.add(elbow);
+    elbow.add(limb(0.28, kim ? top : skinMat, 1.7));
     elbow.add(ball(0.055, skinMat, 0, -0.3, 0, 1, 1.15, 0.8));
+    if (!kim && side < 0){ const ph = box(0.05, 0.1, 0.01, phoneMat, 0, -0.33, 0.045); ph.rotation.x = -0.5; elbow.add(ph); }
     shoulder.add(arm); body.add(shoulder); arms.push(arm);
   }
-  // head on a short neck; pivot at the neck so nods look right
-  body.add(new T.Mesh(new T.CylinderGeometry(0.06, 0.07, 0.12, 12), skinMat)).position.set(0, HIP + 0.64, 0);
+  // head on a short neck; pivot at the neck so nods look right; the face is a texture
+  body.add(cyl(0.06, 0.07, 0.12, skinMat, 0, HIP + 0.64, 0, 12));
   const head = new T.Group(); head.position.set(0, HIP + 0.66, 0); body.add(head);
-  // the face is built at a base size and scaled up a touch so the head reads big and round
   const face = new T.Group(); face.scale.setScalar(1.14); head.add(face);
   const R = 0.165;
-  face.add(ball(R, skinMat, 0, 0.17, 0, 1.06, 1.0, 1.0));
-  // hair: a flat-topped block as wide as the head (sides shaved below it), rounded cap, set back from the forehead
-  const top = new T.Mesh(new T.CylinderGeometry(0.172, 0.168, 0.1, 24), hairMat); top.position.set(0, 0.285, -0.012); face.add(top);
-  face.add(ball(0.172, hairMat, 0, 0.335, -0.012, 1, 0.42, 1));
-  // face: brows, small eyes behind round glasses, nose, slight smile
-  const eyes = [];
-  for (const side of [1, -1]){
-    face.add(box(0.06, 0.012, 0.01, hairMat, 0.065 * side, 0.235, 0.152));
-    const eye = ball(0.017, darkMat, 0.062 * side, 0.2, 0.158); face.add(eye); eyes.push(eye);
-    const ring = new T.Mesh(RING, darkMat); ring.position.set(0.063 * side, 0.198, 0.17); face.add(ring);
-    face.add(box(0.06, 0.006, 0.006, darkMat, 0.135 * side, 0.205, 0.13)).rotation.y = -0.9 * side;
+  face.add(ball(R, faceMat, 0, 0.17, 0, 1.06, 1.0, 1.0));
+  face.add(ball(0.026, skinMat, 0, 0.158, 0.168, 1, 0.9, 1));                       // nose tip
+  for (const side of [1, -1]) face.add(ball(0.03, skinMat, 0.168 * side, 0.17, -0.01, 0.5, 1, 0.8));   // ears
+  for (const side of [1, -1]){ const tp = box(0.07, 0.006, 0.006, darkMat, 0.14 * side, 0.205, 0.12); tp.rotation.y = -1.1 * side; face.add(tp); }   // glasses temples
+  if (kim){
+    // full cheeks and a double chin; hair: a tall flat-topped block, wider at the top than the shaved line, with a raised front
+    face.add(ball(0.1, skinMat, 0, 0.045, 0.07, 1.35, 0.45, 0.95));
+    face.add(cyl(0.188, 0.15, 0.12, hairMat, 0, 0.32, -0.012, 28));
+    face.add(ball(0.188, hairMat, 0, 0.38, -0.012, 1, 0.3, 1));
+    face.add(box(0.15, 0.05, 0.06, hairMat, 0, 0.395, 0.115));
+  } else {
+    // black cap: dome, band, brim and a white S on the front; a little hair shows under the band
+    face.add(ball(0.17, hairMat, 0, 0.19, 0, 1.0, 0.8, 1.0));
+    const dome = new T.Mesh(DOME, capMat); dome.scale.setScalar(0.184); dome.position.set(0, 0.235, 0); face.add(dome);
+    face.add(cyl(0.185, 0.185, 0.05, capMat, 0, 0.235, 0, 28));
+    const brim = box(0.2, 0.014, 0.15, capMat, 0, 0.245, 0.215); brim.rotation.x = -0.08; face.add(brim);
+    const S = decal(x => { x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = '800 100px ' + UI; x.fillText('S', 64, 68); }, 128, 128, 0.08, 0.08);
+    S.position.set(0, 0.315, 0.168); S.rotation.x = -0.5; face.add(S);
   }
-  face.add(box(0.03, 0.006, 0.006, darkMat, 0, 0.2, 0.172));
-  face.add(ball(0.026, skinMat, 0, 0.165, 0.165, 1, 0.9, 1));
-  face.add(box(0.055, 0.009, 0.008, mouthMat, 0, 0.112, 0.158));
-  for (const side of [1, -1]) face.add(ball(0.03, skinMat, 0.168 * side, 0.17, -0.01, 0.5, 1, 0.8));
   const shadow = new T.Mesh(SHADOW_GEO, shadowMat); shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.012; shadow.userData.noPick = true; g.add(shadow);
   if (isMe){
     const ring = new T.Mesh(new T.RingGeometry(0.46, 0.52, 40), new T.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0.85, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.016; g.add(ring);
   }
-  return { g, body, head, abd, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], eyes, mats: [suit] };
+  return { g, body, head, abd, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], eyes: [], mats: [top, faceMat] };
 }
 
 function nameCanvas(name, isMe){
@@ -909,7 +1005,7 @@ class Avatar {
   constructor(o){
     this.isMe = !!o.isMe; this.name = o.name; this.seed = (avatarSeq++) * 1.7;
     this.color = ((o.color | 0) % BODY.length + BODY.length) % BODY.length;
-    this.p = makeAnt(BODY[this.color], this.isMe);
+    this.p = makeFigure(o.kind || 'kim', BODY[this.color], this.isMe);
     this.g = this.p.g; scene.add(this.g);
     this.labelMat = new T.SpriteMaterial({ map: canvasTex(nameCanvas(o.name, this.isMe)), transparent: true, depthTest: false, depthWrite: false });
     this.label = new T.Sprite(this.labelMat); this.label.scale.set(1.64, 0.36, 1); this.label.renderOrder = 10; this.g.add(this.label);
@@ -996,7 +1092,7 @@ class Avatar {
     this.labelMat.map.dispose(); this.labelMat.dispose();
     if (this.chatMat.map) this.chatMat.map.dispose(); this.chatMat.dispose();
     if (this.avgMat.map) this.avgMat.map.dispose(); this.avgMat.dispose();
-    this.p.mats.forEach(m => m.dispose());
+    this.p.mats.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
   }
 }
 
@@ -1649,6 +1745,39 @@ renderCount();
 renderChat();
 connect();
 
+/* ------------------------------------------------------------------
+   NPC: wanders the aisles slowly, pausing at corners (never sent to the room)
+   ------------------------------------------------------------------ */
+const NPC_NODES = [[0, -5.2], [7.3, -5.2], [-7.3, -5.2], [7.3, 5.6], [-7.3, 5.6], [0, 5.6], [0, 0], [7.5, 10], [-7.5, 10], [0, 10]];
+const NPC_EDGES = [[1, 2, 6], [0, 3], [0, 4], [1, 5, 7], [2, 5, 8], [3, 4, 6, 9], [0, 5], [3, 9], [4, 9], [5, 7, 8]];
+const NPC_SPEED = 0.75;
+class Npc {
+  constructor(av, node){ this.av = av; this.node = node; this.prev = -1; this.to = null; this.wait = 2 + Math.random() * 3; }
+  update(dt, t){
+    const av = this.av;
+    if (this.to){
+      const dx = this.to.x - av.x, dz = this.to.z - av.z, d = Math.hypot(dx, dz);
+      if (d < 0.05){ av.x = this.to.x; av.z = this.to.z; this.to = null; this.wait = 1.5 + Math.random() * 4; av.speed = 0; }
+      else {
+        const sp = Math.min(NPC_SPEED, d / Math.max(dt, 1e-3));
+        av.x += dx / d * sp * dt; av.z += dz / d * sp * dt;
+        av.r = wrapA(angleLerp(av.r, Math.atan2(dx, dz), 1 - Math.exp(-dt * 8)));
+        av.speed = sp;
+      }
+    } else {
+      av.speed = 0; this.wait -= dt;
+      if (this.wait <= 0){
+        const opts = NPC_EDGES[this.node].filter(i => i !== this.prev), next = opts[(Math.random() * opts.length) | 0];
+        this.prev = this.node; this.node = next;
+        this.to = { x: NPC_NODES[next][0] + (Math.random() - 0.5) * 0.6, z: NPC_NODES[next][1] + (Math.random() - 0.5) * 0.6 };
+      } else av.r = wrapA(angleLerp(av.r, Math.PI, 1 - Math.exp(-dt * 0.8)));   // idle: slowly turn to the board
+    }
+    av.update(dt, t);
+  }
+}
+const npcs = [new Npc(new Avatar({ name: '동네 힙스터', color: 0, kind: 'hype', x: 7.3, z: 5.6, r: Math.PI }), 3)];
+function updateNpcs(dt, t){ for (const n of npcs) n.update(dt, t); }
+
 function updateOthers(dt, t){
   const k = 1 - Math.exp(-dt * 9);
   others.forEach(av => {
@@ -1714,6 +1843,7 @@ function frame(now){
   updatePlayer(dt);
   player.update(dt, t);
   updateOthers(dt, t);
+  updateNpcs(dt, t);
   updateCamera(dt);
   if (markerT > 0){ markerT = Math.max(0, markerT - dt * 1.4); marker.material.opacity = markerT * 0.9; marker.scale.setScalar(1 + (1 - markerT) * 0.4); }
   sendState(false);
