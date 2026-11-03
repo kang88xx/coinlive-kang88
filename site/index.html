@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>코루라이브 객장</title>
+<title>코인 시부레</title>
+<link rel="icon" href="assets/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/favicon.png">
 <meta name="theme-color" content="#0b0d0f">
-<meta name="description" content="하이퍼리퀴드 삼성전자·SK하이닉스 시세를 빗썸 테더 환율로 바꿔 큰 전광판에 띄우는 3D 객장.">
+<meta name="description" content="하이퍼리퀴드 비트코인·이더리움 시세를 빗썸 테더 환율로 바꿔 큰 전광판에 띄우는 3D 객장.">
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: full-bleed 3D brokerage floor (객장) facing one big LED board; glass HUD pills on top, chat bar at the bottom.
-   Single dark look by choice: a night-time trading floor lit by the board. */
+   The room is a bright white-toned floor; the HUD keeps its dark glass look over it. */
 :root{
   color-scheme: dark;
   --bg:#0b0d0f;
@@ -135,14 +137,14 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
 </head>
 <body>
 <div id="app">
-  <canvas id="scene" tabindex="0" aria-label="코루라이브 객장 3D 화면. 앞쪽 전광판에 삼성전자와 SK하이닉스 1분봉 차트가 원화로 나옵니다. 바닥을 누르면 이동하고, 의자를 누르면 앉습니다."></canvas>
+  <canvas id="scene" tabindex="0" aria-label="코인 시부레 3D 화면. 앞쪽 전광판에 비트코인과 이더리움 1분봉 차트가 원화로 나옵니다. 바닥을 누르면 이동하고, 의자를 누르면 앉습니다."></canvas>
 
   <header class="hud-top">
     <div class="pill brand">
       <a class="exit" href="https://korulive.com/" aria-label="코루라이브로 돌아가기" title="코루라이브로 돌아가기">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4"/><path d="M8 7.5 3.5 12 8 16.5"/></svg>
       </a>
-      <span class="mark">코루라이브</span>
+      <span class="mark">코인 시부레</span>
       <span class="count"><span class="dot" id="dot"></span><span id="count">연결 중</span></span>
     </div>
     <div class="right">
@@ -156,11 +158,11 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
     <form id="avgForm" novalidate>
       <p class="avg-title" id="avgTitle">내 평단</p>
       <div class="seg" role="radiogroup" aria-label="종목">
-        <label><input type="radio" name="avgStock" value="SMSN" id="avgSMSN" checked><span>삼성전자</span></label>
-        <label><input type="radio" name="avgStock" value="SKHX" id="avgSKHX"><span>SK하이닉스</span></label>
+        <label><input type="radio" name="avgStock" value="BTC" id="avgBTC" checked><span>비트코인</span></label>
+        <label><input type="radio" name="avgStock" value="ETH" id="avgETH"><span>이더리움</span></label>
       </div>
       <label class="avg-field" for="avgPrice"><input id="avgPrice" name="avgPrice" inputmode="numeric" autocomplete="off" enterkeyhint="done" aria-describedby="avgHint"><span>원</span></label>
-      <p class="avg-hint" id="avgHint" aria-live="polite">만 원 단위 층으로 바꿔서 이름 위에 표시돼요. 224,000원이면 "삼전 22층"이에요.</p>
+      <p class="avg-hint" id="avgHint" aria-live="polite">만 원 단위 층으로 바꿔서 이름 위에 표시돼요. 150,000,000원이면 "비트 15,000층"이에요.</p>
       <div class="avg-actions">
         <button type="button" class="ghost" id="avgClear">지우기</button>
         <button type="submit" class="primary" id="avgSave">표시하기</button>
@@ -208,20 +210,21 @@ const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: r
 /* ------------------------------------------------------------------
    Market data, computed exactly like korulive.com's cards:
    - korulive anchor, every 60 s (its cron runs once a minute, CDN cached)
-   - Hyperliquid metaAndAssetCtxs dex "xyz", every 10 s: markPx of xyz:SMSN, xyz:SKHX, xyz:KR200
+   - Hyperliquid metaAndAssetCtxs (main perps), every 10 s: markPx and prevDayPx of BTC, ETH
+   - Hyperliquid metaAndAssetCtxs dex "xyz", every 10 s: markPx of xyz:KR200 (for the KOSPI tape)
    - Hyperliquid candleSnapshot 1m, every 60 s (the live candle follows each 10 s mark in between)
    FX (환율)  = usdtKrwLive × usdKrwAnchor / usdtKrwAnchor   (korulive's synthetic rate)
-   Stock won  = markPx × FX;  change = (won / samsungKsClose | hynixKsClose - 1) × 100
+   Coin won   = markPx × FX;  change = (markPx / prevDayPx - 1) × 100  (vs 24 h ago)
    KOSPI      = KR200 mark × kospiClose / kospi200Close;  change = (KR200 mark / kospi200Close - 1) × 100
    ------------------------------------------------------------------ */
 const STOCKS = [
-  { code: 'SMSN', short: '삼전', coin: 'xyz:SMSN', name: '삼성전자',  pair: 'SMSN/USDC', closeKey: 'samsungKsClose', mark: null, candles: [], close: null },
-  { code: 'SKHX', short: '하닉', coin: 'xyz:SKHX', name: 'SK하이닉스', pair: 'SKHX/USDC', closeKey: 'hynixKsClose', mark: null, candles: [], close: null },
+  { code: 'BTC', short: '비트', coin: 'BTC', name: '비트코인', pair: 'BTC/USDC', mark: null, prev: null, candles: [] },
+  { code: 'ETH', short: '이더', coin: 'ETH', name: '이더리움', pair: 'ETH/USDC', mark: null, prev: null, candles: [] },
 ];
-const STOCK_BY = { SMSN: STOCKS[0], SKHX: STOCKS[1] };
+const STOCK_BY = { BTC: STOCKS[0], ETH: STOCKS[1] };
 function hasOwn(o, k){ return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }
 const AVG_MAX = 1e9;
-// a 평단 is { s: 'SMSN' | 'SKHX', p: won }; anything else is ignored
+// a 평단 is { s: 'BTC' | 'ETH', p: won }; anything else is ignored
 function cleanAvg(a){
   return a && typeof a === 'object' && hasOwn(STOCK_BY, a.s) && Number.isInteger(a.p) && a.p >= 1e4 && a.p <= AVG_MAX ? { s: a.s, p: a.p } : null;
 }
@@ -283,16 +286,25 @@ function liveCandle(s){
     last.c = px; if (px > last.h) last.h = px; if (px < last.l) last.l = px;
   }
 }
-// markPx of both stocks and KR200, one call
+// markPx (and prevDayPx) of BTC/ETH from the main perps, and KR200 from the xyz dex, in parallel
+function ctxLookup(d){
+  const meta = d && d[0], ctxs = d && d[1];
+  if (!meta || !Array.isArray(meta.universe) || !Array.isArray(ctxs)) return null;
+  return name => { const i = meta.universe.findIndex(u => u.name === name); return i >= 0 && ctxs[i] ? ctxs[i] : null; };
+}
 async function pollMark(){
   try {
-    const d = await hlPost({ type: 'metaAndAssetCtxs', dex: 'xyz' });
-    const meta = d && d[0], ctxs = d && d[1];
-    if (!meta || !Array.isArray(meta.universe) || !Array.isArray(ctxs)) return;
-    const markOf = name => { const i = meta.universe.findIndex(u => u.name === name); return i >= 0 && ctxs[i] ? numOrNull(ctxs[i].markPx) : null; };
+    const [main, xyz] = await Promise.all([
+      hlPost({ type: 'metaAndAssetCtxs' }).catch(() => null),
+      hlPost({ type: 'metaAndAssetCtxs', dex: 'xyz' }).catch(() => null),
+    ]);
+    const mainOf = ctxLookup(main), xyzOf = ctxLookup(xyz);
     let got = false;
-    for (const s of STOCKS){ const m = markOf(s.coin); if (m != null){ s.mark = m; liveCandle(s); got = true; } }
-    M.kr200 = markOf(KR200) ?? M.kr200;
+    if (mainOf) for (const s of STOCKS){
+      const c = mainOf(s.coin), m = c ? numOrNull(c.markPx) : null;
+      if (m != null){ s.mark = m; s.prev = numOrNull(c.prevDayPx) ?? s.prev; liveCandle(s); got = true; }
+    }
+    if (xyzOf){ const c = xyzOf(KR200), m = c ? numOrNull(c.markPx) : null; if (m != null) M.kr200 = m; }
     if (got){ M.hlAt = Date.now(); markDirty(); }
   } catch (e) {}
 }
@@ -308,7 +320,6 @@ async function pollAnchor(){
     };
     const live = pos(a.usdtKrwLive) ?? pos(a.usdtKrwAnchor), usdK = pos(a.usdKrwAnchor), usdtK = pos(a.usdtKrwAnchor);
     if (live) M.usdt = usdK && usdtK ? live * usdK / usdtK : live;
-    for (const s of STOCKS) s.close = pos(a[s.closeKey]) ?? s.close;
     M.anchorAt = Date.now();
     markDirty();
   } catch (e) {}
@@ -346,14 +357,15 @@ const STATUS_TEXT = { live: '10초마다 갱신', connecting: '연결 중', part
 
 function view(s){
   const px = s.mark, r = M.usdt;
-  // the shown price is floored to 100원; the % uses the unfloored price, as korulive.com's cards do
+  // the shown price is floored to 100원; the % compares the USD mark with Hyperliquid's price 24 h ago
   const raw = px != null && r != null ? px * r : null, p = raw != null ? floor100(raw) : null;
-  const chg = p != null && s.close ? p - s.close : null;
-  const pct = raw != null && s.close ? (raw / s.close - 1) * 100 : null;
+  const prevWon = s.prev != null && r != null ? floor100(s.prev * r) : null;
+  const chg = p != null && prevWon != null ? p - prevWon : null;
+  const pct = px != null && s.prev ? (px / s.prev - 1) * 100 : null;
   return { px, p, pct, chg, dir: signDir(pct) };
 }
 
-// 삼성전자·SK하이닉스 won prices are floored to 100원, like korulive.com (live price and every candle's O/H/L/C)
+// won prices are floored to 100원, like korulive.com (live price and every candle's O/H/L/C)
 function floor100(v){ return Math.floor(v / 100) * 100; }
 const nf0 = new Intl.NumberFormat('ko-KR');
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -394,12 +406,12 @@ function runs(x, parts, X, Y, align){
   return w;
 }
 
-// two equal panels (삼성전자 | SK하이닉스) over one shared footer
+// two equal panels (비트코인 | 이더리움) over one shared footer
 const BW = 2600, BH = 1270, PANEL = BW / 2, HEAD = 236, FOOT = BH - 88;
 const bc = document.createElement('canvas'); bc.width = BW; bc.height = BH;
 const bx = bc.getContext('2d');
 const boardDots = ledPattern(bx, 5, 0.42);
-const DISCLAIMER = '해외 코인 거래소의 SMSN/USDC·SKHX/USDC 가격이며, 실제 삼성전자·SK하이닉스 가격이 아니에요.';
+const DISCLAIMER = '하이퍼리퀴드 BTC/USDC·ETH/USDC 무기한 선물 가격을 원화로 바꾼 값이며, 국내 거래소 시세와 달라요.';
 let roomCount = 0, roomState = 'connecting';
 
 function drawPanel(x, ox, s, st, nowMs){
@@ -410,7 +422,7 @@ function drawPanel(x, ox, s, st, nowMs){
   x.fillStyle = COL.panel; x.fillRect(ox, 0, PANEL, HEAD);
   x.font = '700 64px ' + UI; x.fillStyle = COL.text; x.fillText(s.name, ox + 44, 80);
   const nameW = x.measureText(s.name).width;
-  // pair one step below the name, then the live USD mark: "SMSN/USDC  $170.71"
+  // pair one step below the name, then the live USD mark: "BTC/USDC  $76,807.00"
   x.font = '500 48px ' + UI; x.fillStyle = COL.muted;
   const pairX = ox + 44 + nameW + 24;
   x.fillText(s.pair, pairX, 80);
@@ -425,7 +437,7 @@ function drawPanel(x, ox, s, st, nowMs){
       let fs = 54; x.font = fs + 'px ' + LED;
       while (fs > 30 && cx + x.measureText(txt).width > ox + PANEL - 28){ fs -= 2; x.font = fs + 'px ' + LED; }
       x.fillStyle = COL[v.dir]; x.fillText(txt, cx, 170);
-      x.font = '500 30px ' + UI; x.fillStyle = COL.muted; x.fillText('정규장 마감 대비', cx, 212);
+      x.font = '500 30px ' + UI; x.fillStyle = COL.muted; x.fillText('24시간 전 대비', cx, 212);
     }
   } else {
     x.font = '600 48px ' + UI; x.fillStyle = COL.muted;
@@ -451,7 +463,7 @@ function drawPanel(x, ox, s, st, nowMs){
       x.strokeStyle = COL.grid; x.beginPath(); x.moveTo(X0, y); x.lineTo(X1, y); x.stroke();
       if (Math.abs(y - yNow) > 40){ x.fillStyle = COL.muted; x.fillText(won(val), X1 + 16, y + 12); }
     }
-    x.font = '500 30px ' + UI; x.fillStyle = COL.muted; x.fillText('1분봉 · 원', X0, Y0 - 22); x.fillText('거래량 (주)', X0, V0 - 14);
+    x.font = '500 30px ' + UI; x.fillStyle = COL.muted; x.fillText('1분봉 · 원', X0, Y0 - 22); x.fillText('거래량 (' + s.code + ')', X0, V0 - 14);
     x.fillStyle = COL.grid; x.fillRect(X0, V1 + 1, X1 - X0, 1);
     const n = 60, cw = (X1 - X0) / n, bw = Math.max(3, cw * 0.62), off = n - cs.length;
     cs.forEach((k, i) => {
@@ -555,13 +567,13 @@ renderer.outputEncoding = T.sRGBEncoding;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new T.Scene();
-scene.background = new T.Color('#0b0d0f');
-scene.fog = new T.Fog('#0b0d0f', 28, 50);
+scene.background = new T.Color('#eef0f3');
+scene.fog = new T.Fog('#eef0f3', 28, 50);
 const camera = new T.PerspectiveCamera(55, 1, 0.1, 120);
 
-scene.add(new T.HemisphereLight(0xcfd6e0, 0x2a241c, 0.46));
-const keyLight = new T.DirectionalLight(0xfff1dc, 0.5); keyLight.position.set(4, 12, 8); scene.add(keyLight);
-const boardLight = new T.PointLight(0xffd9a0, 1.6, 30, 1.4); boardLight.position.set(0, 5.5, -7.2); scene.add(boardLight);
+scene.add(new T.HemisphereLight(0xffffff, 0xd6d9dd, 0.7));
+const keyLight = new T.DirectionalLight(0xffffff, 0.55); keyLight.position.set(4, 12, 8); scene.add(keyLight);
+const boardLight = new T.PointLight(0xffd9a0, 0.9, 30, 1.4); boardLight.position.set(0, 5.5, -7.2); scene.add(boardLight);
 
 function canvasTex(c, repeat){
   const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = maxAniso;
@@ -576,18 +588,18 @@ let floorMesh = null;
 (function buildRoom(){
   const fc = document.createElement('canvas'); fc.width = fc.height = 256;
   const f = fc.getContext('2d');
-  f.fillStyle = '#2c2925'; f.fillRect(0, 0, 256, 256);
-  const chips = ['#3a3530', '#221f1c', '#4a433b', '#5a3e31', '#6b6458']; let s = 7;
+  f.fillStyle = '#e8eaed'; f.fillRect(0, 0, 256, 256);
+  const chips = ['#dde0e4', '#d3d6da', '#f3f4f6', '#cbcfd4', '#e2e4e7']; let s = 7;
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 1400; i++){ f.fillStyle = chips[(rnd() * chips.length) | 0]; f.beginPath(); f.arc(rnd() * 256, rnd() * 256, rnd() * 1.8 + 0.4, 0, Math.PI * 2); f.fill(); }
-  f.fillStyle = '#181613'; f.fillRect(0, 0, 256, 3); f.fillRect(0, 0, 3, 256);
+  f.fillStyle = '#cfd3d8'; f.fillRect(0, 0, 256, 3); f.fillRect(0, 0, 3, 256);
   const floorTex = canvasTex(fc, true); floorTex.repeat.set(RW / 2, RD / 2);
   const floor = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ map: floorTex, roughness: 0.5, metalness: 0.06 }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, RZ); scene.add(floor);
   floorMesh = floor;
 
-  const wallMat = new T.MeshStandardMaterial({ color: '#13171a', roughness: 0.92 });
-  const woodMat = new T.MeshStandardMaterial({ color: '#2b211a', roughness: 0.7 });
+  const wallMat = new T.MeshStandardMaterial({ color: '#f4f5f7', roughness: 0.92 });
+  const woodMat = new T.MeshStandardMaterial({ color: '#d9dcdf', roughness: 0.7 });
   const walls = [
     { w: RW, pos: [0, ROOM.h / 2, ROOM.z0], ry: 0 },
     { w: RD, pos: [ROOM.x0, ROOM.h / 2, RZ], ry: Math.PI / 2 },
@@ -600,13 +612,13 @@ let floorMesh = null;
     const off = new T.Vector3(0, 0, 0.02).applyAxisAngle(new T.Vector3(0, 1, 0), d.ry);
     band.position.set(d.pos[0] + off.x, 0.55, d.pos[2] + off.z); band.rotation.y = d.ry; scene.add(band);
   });
-  const ceil = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ color: '#111416', roughness: 1 }));
+  const ceil = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ color: '#f8f9fa', roughness: 1 }));
   ceil.rotation.x = Math.PI / 2; ceil.position.set(0, ROOM.h, RZ); scene.add(ceil);
   const lampMat = new T.MeshBasicMaterial({ color: '#fff0d6' }), lampGeo = new T.PlaneGeometry(3.2, 0.32);
   for (const lx of [-6.5, 0, 6.5]) for (const lz of [-5, 0, 5, 10]){
     const l = new T.Mesh(lampGeo, lampMat); l.rotation.x = Math.PI / 2; l.position.set(lx, ROOM.h - 0.02, lz); scene.add(l);
   }
-  const pilMat = new T.MeshStandardMaterial({ color: '#1a1f23', roughness: 0.85 }), pilGeo = new T.BoxGeometry(0.5, ROOM.h, 0.3);
+  const pilMat = new T.MeshStandardMaterial({ color: '#e4e7ea', roughness: 0.85 }), pilGeo = new T.BoxGeometry(0.5, ROOM.h, 0.3);
   // the bay between -1.5 and 4.5 is a little wider so the wall signs hang clear of the pillars
   for (const pz of [-6.5, -1.5, 4.5, 9.5, 13.6]) for (const sx of [-1, 1]){
     const p = new T.Mesh(pilGeo, pilMat); p.position.set(sx * (ROOM.x1 - 0.15), ROOM.h / 2, pz); p.rotation.y = Math.PI / 2; scene.add(p);
@@ -648,9 +660,9 @@ const signs = [];
 function buildSigns(){
   signs.forEach(s => { scene.remove(s); s.material.map.dispose(); s.material.dispose(); });
   signs.length = 0;
-  // korulive green, darkened and softened so it reads like a painted sign in a dim room
-  const a = new T.Mesh(new T.PlaneGeometry(4.4, 1.1), new T.MeshBasicMaterial({
-    map: signTexture('코루라이브 객장', 1024, 256, '700 116px ' + UI, '#e8eee0', '#2f5a27') }));
+  // left wall: green protest sign, two lines sized to the bay
+  const a = new T.Mesh(new T.PlaneGeometry(5.0, 5.0 * 420 / 1024), new T.MeshBasicMaterial({
+    map: twoLineSign(['대한민국 코인 과세', '반대합니다'], 1024, 420, '#eef5e8', '#2f6b2a') }));
   a.position.set(ROOM.x0 + 0.07, 6.6, 1.5); a.rotation.y = Math.PI / 2;
   // two lines, as large as the bay between the pillars allows
   const b = new T.Mesh(new T.PlaneGeometry(5.0, 5.0 * 420 / 1024), new T.MeshBasicMaterial({
@@ -673,7 +685,7 @@ const gc = document.createElement('canvas'); gc.width = gc.height = 256;
 (function(){ const g = gc.getContext('2d'), grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
   grd.addColorStop(0, 'rgba(255,255,255,0.9)'); grd.addColorStop(0.55, 'rgba(255,255,255,0.25)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grd; g.fillRect(0, 0, 256, 256); })();
-const glowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: new T.Color('#ffb547'), transparent: true, opacity: 0.45, blending: T.AdditiveBlending, depthWrite: false });
+const glowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: new T.Color('#ffb547'), transparent: true, opacity: 0.22, blending: T.AdditiveBlending, depthWrite: false });
 const glow = new T.Mesh(new T.PlaneGeometry(Math.min(RW - 0.4, BOARD.w + 6), BOARD.h + 5), glowMat); glow.position.set(0, BOARD.y, -9.98); scene.add(glow);
 
 const tickerTex = canvasTex(tc, true);
@@ -687,7 +699,7 @@ const ROWS = [-3.2, -1.6, 0, 1.6, 3.2], BLOCKS = [-3.4, 3.4], SLOT = [-1.875, -0
 const seats = [], benches = [];
 ROWS.forEach(z => BLOCKS.forEach(bxp => { const bi = benches.length; benches.push({ x: bxp, z }); SLOT.forEach(o => seats.push({ x: bxp + o, z, bench: bi })); }));
 const seatMesh = new T.InstancedMesh(new T.BoxGeometry(5.2, 0.1, 0.52), new T.MeshStandardMaterial({ color: '#ffffff', roughness: 0.62 }), benches.length);
-const legMesh = new T.InstancedMesh(new T.BoxGeometry(0.12, SEAT_Y - 0.05, 0.42), new T.MeshStandardMaterial({ color: '#141618', roughness: 0.5, metalness: 0.5 }), benches.length * 2);
+const legMesh = new T.InstancedMesh(new T.BoxGeometry(0.12, SEAT_Y - 0.05, 0.42), new T.MeshStandardMaterial({ color: '#9ea3a9', roughness: 0.5, metalness: 0.5 }), benches.length * 2);
 const mtx = new T.Matrix4();
 benches.forEach((b, i) => {
   mtx.makeTranslation(b.x, SEAT_Y - 0.05, b.z); seatMesh.setMatrixAt(i, mtx);
@@ -695,9 +707,9 @@ benches.forEach((b, i) => {
   mtx.makeTranslation(b.x + 2.3, (SEAT_Y - 0.05) / 2, b.z); legMesh.setMatrixAt(i * 2 + 1, mtx);
 });
 seatMesh.instanceMatrix.needsUpdate = true; legMesh.instanceMatrix.needsUpdate = true;
-// seats facing the board: right block a worn brick red (상승), left block a faded denim blue (하락),
+// seats facing the board: light gray on both blocks,
 // each bench a touch lighter or darker so the rows read as real upholstery rather than flat paint
-const SEAT_UP = new T.Color('#a34a4f').convertSRGBToLinear(), SEAT_DOWN = new T.Color('#46669c').convertSRGBToLinear();
+const SEAT_UP = new T.Color('#c3c7cc').convertSRGBToLinear(), SEAT_DOWN = new T.Color('#c3c7cc').convertSRGBToLinear();
 const seatTint = new T.Color();
 benches.forEach((b, i) => {
   seatTint.copy(b.x > 0 ? SEAT_UP : SEAT_DOWN).multiplyScalar(0.92 + ((i * 37) % 9) / 50);
@@ -772,7 +784,7 @@ function nameCanvas(name, isMe){
   x.fillStyle = '#ece7dc'; x.fillText(name, X + 22 + badge, 58, 400);
   return c;
 }
-// 평단 chip above the name: "삼전 224,000원", outlined red when the stock is above it, blue when below
+// 평단 chip above the name: "비트 15,000층", outlined red when the coin is above it, blue when below
 function avgDir(avg){
   const s = avg && STOCK_BY[avg.s];
   const p = s ? view(s).p : null;
@@ -1092,13 +1104,13 @@ window.addEventListener('keyup', e => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 
 /* ------------------------------------------------------------------
-   평단 입력: pick 삼성전자 or SK하이닉스, type an average price,
-   and it shows above my ant's name as "삼전 224,000원"
+   평단 입력: pick 비트코인 or 이더리움, type an average price,
+   and it shows above my ant's name as "비트 15,000층"
    ------------------------------------------------------------------ */
 const avgBtn = $('#avgBtn'), avgPanel = $('#avgPanel'), avgForm = $('#avgForm'), avgPrice = $('#avgPrice');
 const avgHint = $('#avgHint'), avgClear = $('#avgClear');
 const AVG_HINT = avgHint.textContent;
-function avgStock(){ const r = avgForm.querySelector('input[name="avgStock"]:checked'); return r ? r.value : 'SMSN'; }
+function avgStock(){ const r = avgForm.querySelector('input[name="avgStock"]:checked'); return r ? r.value : 'BTC'; }
 function avgPlaceholder(){
   const v = view(STOCK_BY[avgStock()]);
   avgPrice.placeholder = v.p != null ? '예: ' + won(v.p) : '평단을 입력하세요';
@@ -1113,7 +1125,7 @@ function previewHint(){
 }
 function openAvg(){
   const cur = me.avg;
-  avgForm.querySelector('input[value="' + (cur ? cur.s : 'SMSN') + '"]').checked = true;
+  avgForm.querySelector('input[value="' + (cur ? cur.s : 'BTC') + '"]').checked = true;
   avgPrice.value = cur ? won(cur.p) : '';
   avgClear.hidden = !cur;
   previewHint(); avgPlaceholder();
@@ -1594,7 +1606,7 @@ function refreshHud(){
   if (!avgPanel.hidden && !avgPrice.value) avgPlaceholder();
   if (vs.some(v => v.p != null) && Date.now() - lastSr > 30000){
     lastSr = Date.now();
-    sr.textContent = STOCKS.map((s, i) => vs[i].p == null ? '' : s.name + ' ' + won(vs[i].p) + '원' + (vs[i].pct != null ? ', 정규장 마감 대비 ' + fmtPct(vs[i].pct) : '') + '.').join(' ');
+    sr.textContent = STOCKS.map((s, i) => vs[i].p == null ? '' : s.name + ' ' + won(vs[i].p) + '원' + (vs[i].pct != null ? ', 24시간 전 대비 ' + fmtPct(vs[i].pct) : '') + '.').join(' ');
   }
   // the room glows red when both are up, blue when both are down
   glowTarget.set(vs.every(v => v.dir === 'up') ? '#ff4d57' : vs.every(v => v.dir === 'down') ? '#3f8cff' : '#ffb547');
@@ -1645,7 +1657,7 @@ if (document.fonts && document.fonts.load){
   Promise.all([
     document.fonts.load('44px "DotGothic16"'),
     document.fonts.load('600 42px "IBM Plex Sans KR"', '개미'),
-    document.fonts.load('700 54px "IBM Plex Sans KR"', '삼성전자 SK하이닉스'),
+    document.fonts.load('700 54px "IBM Plex Sans KR"', '비트코인 이더리움'),
   ]).then(() => {
     markDirty(); lastSec = -1;
     buildSigns();
