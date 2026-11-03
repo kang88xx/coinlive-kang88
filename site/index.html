@@ -752,14 +752,14 @@ let markerT = 0;
    longer...), and the face is a canvas texture wrapped on that head.
    ------------------------------------------------------------------ */
 // suit shades: black, charcoal, ink navy, dark brown-black...
-const BODY = ['#141418', '#1c1c22', '#10141c', '#1e1a1a', '#17171d', '#121216'];
+const BODY = ['#08080a', '#0b0b0e', '#07090c', '#0c0a0a', '#09090c', '#070709'];
 const SPH = new T.SphereGeometry(1, 28, 20);
 const DOME = new T.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
 const LIMB = new T.CylinderGeometry(0.045, 0.038, 1, 10);
 const BOX = new T.BoxGeometry(1, 1, 1);
 const SKIN = '#f1cfae';
 const skinMat = new T.MeshStandardMaterial({ color: SKIN, roughness: 0.55 });
-const hairMat = new T.MeshStandardMaterial({ color: '#0e0c0a', roughness: 0.78 });
+const hairMat = new T.MeshStandardMaterial({ color: '#0a0806', roughness: 0.86 });
 const darkMat = new T.MeshStandardMaterial({ color: '#0d0c0b', roughness: 0.3 });
 const shoeMat = new T.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.25, metalness: 0.2 });
 const denimMat = new T.MeshStandardMaterial({ color: '#a9c4de', roughness: 0.9 });
@@ -784,6 +784,19 @@ function box(w, h, d, mat, x, y, z){
 function cyl(rt, rb, h, mat, x, y, z, seg){
   const m = new T.Mesh(new T.CylinderGeometry(rt, rb, h, seg || 24), mat); m.position.set(x, y, z); return m;
 }
+// a torso as one smooth lathe surface through [radius, height] pairs: no stacked balls, so no ridges between chest, belly and hem
+function torso(prof, mat, zs){
+  const curve = new T.CatmullRomCurve3(prof.map(q => new T.Vector3(q[0], q[1], 0)), false, 'catmullrom', 0.5);
+  const pts = curve.getPoints(48).map(q => new T.Vector2(Math.max(0.001, q.x), q.y));
+  const m = new T.Mesh(new T.LatheGeometry(pts, 40), mat); m.scale.z = zs; m.userData.pts = pts; m.userData.zs = zs;
+  return m;
+}
+// front surface z of a torso at height y (for buttons, pockets, logos)
+function frontZ(t, y){
+  const pts = t.userData.pts;
+  for (let i = 1; i < pts.length; i++) if (pts[i].y >= y){ const a = pts[i - 1], b = pts[i], k = (y - a.y) / Math.max(1e-6, b.y - a.y); return (a.x + (b.x - a.x) * k) * t.userData.zs; }
+  return 0;
+}
 // a unit sphere pushed through a per-vertex shaping function (UVs stay equirectangular, so a face canvas still wraps it)
 function shaped(fn, wseg, hseg){
   const g = new T.SphereGeometry(1, wseg || 36, hseg || 28), a = g.attributes.position, v = new T.Vector3();
@@ -801,8 +814,8 @@ const smooth = (a, b, t) => { t = Math.min(1, Math.max(0, (t - a) / (b - a))); r
 const HEAD_KIM = shaped(v => {
   squarify(v, 3.2);
   const y = v.y, jowl = smooth(0.2, -0.4, y) * (1 - smooth(-0.65, -1, y));   // widest below the cheekbones
-  v.x *= 1.12 * (1 + 0.18 * jowl); v.z *= 0.96 * (1 + 0.06 * jowl);
-  if (y < 0) v.y *= 0.82;                  // short chin
+  v.x *= 1.16 * (1 + 0.2 * jowl); v.z *= 0.96 * (1 + 0.07 * jowl);
+  if (y < 0) v.y *= 0.8;                   // short chin
   if (y > 0.55) v.y = 0.55 + (y - 0.55) * 0.7;   // flatter crown under the hair block
   if (v.z > 0) v.z *= 1 - 0.12 * v.z;       // flatter face plane
 });
@@ -816,9 +829,9 @@ const HEAD_HYPE = shaped(v => {
 // kim's hair: a boxy block, wider at the top than at the shaved line, flat on top, longer front to back
 const HAIR_KIM = shaped(v => {
   squarify(v, 6.0);
-  const taper = 1 + 0.1 * v.y;
+  const taper = 1 + 0.14 * v.y;
   v.x *= taper; v.z *= taper;
-  if (v.y > 0) v.y *= 0.38;
+  if (v.y > 0) v.y *= 0.55;
 }, 32, 20);
 // a transparent decal (logo, letter) on a small plane
 function decal(draw, w, h, pw, ph){
@@ -836,12 +849,12 @@ function faceTexture(kind){
   const shade = (X, Y, rx, ry, a) => { x.fillStyle = 'rgba(150,95,70,' + a + ')'; x.beginPath(); x.ellipse(X, Y, rx, ry, 0, 0, Math.PI * 2); x.fill(); };
   if (kim){
     // shaved sides and back: dark stubble under the hair block; the forehead stays clear
-    x.fillStyle = 'rgba(60,50,45,0.42)';
-    x.fillRect(0, 40, F - 135, 150); x.fillRect(F + 135, 40, 1024 - F - 135, 150);
-    x.fillStyle = 'rgba(60,50,45,0.2)'; x.fillRect(F - 135, 40, 270, 60);
+    x.fillStyle = 'rgba(45,38,34,0.55)';
+    x.fillRect(0, 30, F - 130, 165); x.fillRect(F + 130, 30, 1024 - F - 130, 165);
+    x.fillStyle = 'rgba(45,38,34,0.22)'; x.fillRect(F - 130, 30, 260, 50);
     // full cheeks, jowls and a double chin
-    shade(F - 110, 300, 40, 34, 0.12); shade(F + 110, 300, 40, 34, 0.12);
-    shade(F, 392, 120, 22, 0.16); shade(F, 358, 70, 10, 0.1);
+    shade(F - 112, 304, 42, 36, 0.16); shade(F + 112, 304, 42, 36, 0.16);
+    shade(F, 392, 124, 24, 0.22); shade(F, 360, 74, 10, 0.12);
   } else {
     // dark short hair under the cap line, sideburns
     x.fillStyle = '#1a1512';
@@ -896,74 +909,69 @@ function faceTexture(kind){
     x.beginPath(); x.ellipse(F, 312, 36, 7, 0, 0, Math.PI * 2); x.fill();
     x.beginPath(); x.ellipse(F, 356, 34, 18, 0, 0, Math.PI * 2); x.fill();
   }
-  x.fillStyle = 'rgba(230,120,100,0.13)';
-  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 100, 290, 30, 18, 0, 0, Math.PI * 2); x.fill(); }
+  if (!kim){
+    x.fillStyle = 'rgba(230,120,100,0.13)';
+    for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * 100, 290, 30, 18, 0, 0, Math.PI * 2); x.fill(); }
+  }
   return canvasTex(c);
 }
 
 function makeFigure(kind, hex, isMe){
   const kim = kind === 'kim';
-  const top = new T.MeshStandardMaterial({ color: hex, roughness: 0.9, metalness: 0 });
+  // kim: short legs under a long jacket, a wide body, a big head on almost no neck
+  const hip = kim ? 0.66 : HIP, thigh = kim ? 0.33 : THIGH, shin = kim ? 0.33 : SHIN;
+  const top = new T.MeshStandardMaterial({ color: hex, roughness: 0.95, metalness: 0 });
   const faceMat = new T.MeshStandardMaterial({ map: faceTexture(kind), roughness: 0.6 });
   const g = new T.Group(), body = new T.Group(); g.add(body);
   const legs = [], knees = [], arms = [];
   // legs: thigh at the hip, shin under a knee joint; suit trousers + black shoes, or denim shorts + socks + sneakers
   for (const side of [1, -1]){
-    const leg = new T.Group(); leg.position.set((kim ? 0.16 : 0.17) * side, HIP, 0);
-    leg.add(limb(THIGH, kim ? top : denimMat, kim ? 2.6 : 3.2));
-    const knee = new T.Group(); knee.position.y = -THIGH; leg.add(knee);
-    knee.add(limb(SHIN, kim ? top : skinMat, kim ? 2.3 : 1.8));
-    if (kim) knee.add(ball(0.085, shoeMat, 0, -SHIN + 0.02, 0.05, 1, 0.55, 1.7));
+    const leg = new T.Group(); leg.position.set((kim ? 0.17 : 0.17) * side, hip, 0);
+    leg.add(limb(thigh, kim ? top : denimMat, kim ? 3.0 : 3.2));
+    const knee = new T.Group(); knee.position.y = -thigh; leg.add(knee);
+    knee.add(limb(shin, kim ? top : skinMat, kim ? 2.7 : 1.8));
+    if (kim) knee.add(ball(0.09, shoeMat, 0, -shin + 0.02, 0.05, 1, 0.55, 1.7));
     else {
-      knee.add(cyl(0.064, 0.064, 0.08, whiteMat, 0, -SHIN + 0.1, 0, 12));
-      knee.add(ball(0.092, redMat, 0, -SHIN + 0.03, 0.04, 1, 0.75, 1.65));
-      knee.add(ball(0.074, whiteMat, 0, -SHIN + 0.005, 0.125, 1, 0.55, 1.1));
-      knee.add(ball(0.094, shoeMat, 0, -SHIN - 0.012, 0.045, 1.05, 0.22, 1.75));
+      knee.add(cyl(0.064, 0.064, 0.08, whiteMat, 0, -shin + 0.1, 0, 12));
+      knee.add(ball(0.092, redMat, 0, -shin + 0.03, 0.04, 1, 0.75, 1.65));
+      knee.add(ball(0.074, whiteMat, 0, -shin + 0.005, 0.125, 1, 0.55, 1.1));
+      knee.add(ball(0.094, shoeMat, 0, -shin - 0.012, 0.045, 1.05, 0.22, 1.75));
     }
     body.add(leg); legs.push(leg); knees.push(knee);
   }
-  // torso: kim is widest at the belly with sloping shoulders; the hype kid is a big round tee
+  // torso: one smooth surface each. kim is a long jacket, widest at the belly, with round sloping shoulders;
+  // the hype kid is a big tee that is widest just under the chest
+  const abd = new T.Group(); body.add(abd);
   if (kim){
-    body.add(ball(1, top, 0, HIP + 0.38, 0, 0.36, 0.3, 0.25));
-    const abd = new T.Group(); abd.position.set(0, HIP + 0.14, 0.03); body.add(abd);
-    abd.add(ball(1, top, 0, 0, 0, 0.38, 0.28, 0.3));
-    body.add(cyl(0.35, 0.38, 0.14, top, 0, HIP - 0.01, 0.02));
-    // Mao collar, button column, chest and hip pocket flaps
-    body.add(cyl(0.12, 0.13, 0.1, top, 0, HIP + 0.6, 0.01, 16));
-    for (let i = 0; i < 5; i++){
-      const y = HIP + 0.55 - i * 0.11;
-      const z = i < 3 ? 0.25 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.38)) / 0.3) ** 2)) : 0.3 * Math.sqrt(Math.max(0, 1 - ((y - (HIP + 0.14)) / 0.28) ** 2)) + 0.03;
-      body.add(ball(0.016, darkMat, 0, y, z + 0.004));
-    }
+    const t = torso([[0.001, hip - 0.1], [0.31, hip - 0.09], [0.37, hip - 0.02], [0.41, hip + 0.14], [0.4, hip + 0.3], [0.375, hip + 0.44], [0.31, hip + 0.53], [0.17, hip + 0.59], [0.001, hip + 0.62]], top, 0.74);
+    body.add(t);
+    // Mao collar, a button column down the jacket front, chest and hip pocket flaps
+    body.add(cyl(0.125, 0.135, 0.08, top, 0, hip + 0.6, 0.01, 18));
+    for (let i = 0; i < 5; i++){ const y = hip + 0.5 - i * 0.13; body.add(ball(0.016, darkMat, 0, y, frontZ(t, y) + 0.004)); }
     for (const side of [1, -1]){
-      body.add(box(0.11, 0.035, 0.012, top, 0.14 * side, HIP + 0.47, 0.233));
-      body.add(ball(0.009, darkMat, 0.14 * side, HIP + 0.455, 0.243));
-      body.add(box(0.13, 0.04, 0.012, top, 0.18 * side, HIP + 0.1, 0.285));
+      body.add(box(0.11, 0.035, 0.012, top, 0.15 * side, hip + 0.43, frontZ(t, hip + 0.43) + 0.002));
+      body.add(ball(0.009, darkMat, 0.15 * side, hip + 0.415, frontZ(t, hip + 0.415) + 0.01));
+      body.add(box(0.13, 0.04, 0.012, top, 0.19 * side, hip + 0.03, frontZ(t, hip + 0.03) + 0.002));
     }
-    body.userData.abd = abd;
   } else {
-    body.add(ball(1, top, 0, HIP + 0.36, 0, 0.38, 0.33, 0.27));
-    const abd = new T.Group(); abd.position.set(0, HIP + 0.12, 0.03); body.add(abd);
-    abd.add(ball(1, top, 0, 0, 0, 0.39, 0.25, 0.29));
-    body.add(cyl(0.33, 0.35, 0.1, top, 0, HIP + 0.02, 0.02));
+    const t = torso([[0.001, hip - 0.06], [0.31, hip - 0.05], [0.36, hip + 0.03], [0.4, hip + 0.15], [0.39, hip + 0.32], [0.35, hip + 0.45], [0.26, hip + 0.55], [0.12, hip + 0.61], [0.001, hip + 0.63]], top, 0.74);
+    body.add(t);
     // script logo across the chest, crossbody strap and bag
     const logo = decal(x => {
       x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.font = 'italic 700 150px ' + UI; x.translate(256, 100); x.rotate(-0.12); x.fillText('Stüssy', 0, 0);
     }, 512, 200, 0.34, 0.133);
-    logo.position.set(0, HIP + 0.4, 0.272); body.add(logo);
-    const strap = box(0.045, 0.84, 0.016, bagMat, 0.02, HIP + 0.36, 0.28); strap.rotation.z = -0.62; body.add(strap);
-    const strapBack = box(0.045, 0.84, 0.016, bagMat, 0.02, HIP + 0.36, -0.275); strapBack.rotation.z = 0.62; body.add(strapBack);
-    body.add(box(0.2, 0.15, 0.09, bagMat, 0.15, HIP + 0.13, 0.31));
-    body.add(box(0.2, 0.05, 0.095, darkMat, 0.15, HIP + 0.18, 0.31));
-    body.userData.abd = abd;
+    logo.position.set(0, hip + 0.38, frontZ(t, hip + 0.38) + 0.006); body.add(logo);
+    const strap = box(0.045, 0.84, 0.016, bagMat, 0.02, hip + 0.36, 0.29); strap.rotation.z = -0.62; body.add(strap);
+    const strapBack = box(0.045, 0.84, 0.016, bagMat, 0.02, hip + 0.36, -0.285); strapBack.rotation.z = 0.62; body.add(strapBack);
+    body.add(box(0.2, 0.15, 0.09, bagMat, 0.15, hip + 0.13, 0.32));
+    body.add(box(0.2, 0.05, 0.095, darkMat, 0.15, hip + 0.18, 0.32));
   }
-  const abd = body.userData.abd;
   // arms: the shoulder tilt sits on the parent so the walk swing on the child stays clean
   for (const side of [1, -1]){
-    const shoulder = new T.Group(); shoulder.position.set((kim ? 0.35 : 0.38) * side, HIP + (kim ? 0.5 : 0.52), 0); shoulder.rotation.z = (kim ? 0.14 : 0.18) * side;
+    const shoulder = new T.Group(); shoulder.position.set((kim ? 0.36 : 0.39) * side, hip + (kim ? 0.5 : 0.52), 0); shoulder.rotation.z = (kim ? 0.1 : 0.18) * side;
     const arm = new T.Group();
-    arm.add(limb(0.32, top, kim ? 2.0 : 2.4));
+    arm.add(limb(0.32, top, kim ? 2.2 : 2.4));
     if (!kim) arm.add(cyl(0.1, 0.095, 0.16, top, 0, -0.07, 0, 14));   // short sleeve
     const elbow = new T.Group(); elbow.position.y = -0.32; elbow.rotation.x = kim ? -0.18 : (side < 0 ? -0.9 : -0.18); arm.add(elbow);
     elbow.add(limb(0.28, kim ? top : skinMat, 1.75));
@@ -971,19 +979,18 @@ function makeFigure(kind, hex, isMe){
     if (!kim && side < 0){ const ph = box(0.05, 0.1, 0.01, phoneMat, 0, -0.33, 0.045); ph.rotation.x = -0.5; elbow.add(ph); }
     shoulder.add(arm); body.add(shoulder); arms.push(arm);
   }
-  // head: kim's sits low on a thick short neck; the shaped head geometry carries the face texture
-  body.add(cyl(kim ? 0.085 : 0.06, kim ? 0.1 : 0.07, 0.12, skinMat, 0, HIP + (kim ? 0.62 : 0.64), 0, 12));
-  const head = new T.Group(); head.position.set(0, HIP + (kim ? 0.62 : 0.66), 0); body.add(head);
-  const face = new T.Group(); face.scale.setScalar(kim ? 1.16 : 1.1); head.add(face);
+  // head: kim's sits right on the shoulders over a thick short neck; the shaped head geometry carries the face texture
+  body.add(cyl(kim ? 0.11 : 0.06, kim ? 0.13 : 0.07, 0.12, skinMat, 0, hip + (kim ? 0.6 : 0.64), 0, 14));
+  const head = new T.Group(); head.position.set(0, hip + (kim ? 0.57 : 0.66), 0); body.add(head);
+  const face = new T.Group(); face.scale.setScalar(kim ? 1.22 : 1.1); head.add(face);
   const R = 0.165;
   const skull = new T.Mesh(kim ? HEAD_KIM : HEAD_HYPE, faceMat); skull.scale.setScalar(R); skull.position.set(0, 0.17, 0); face.add(skull);
   face.add(ball(kim ? 0.024 : 0.022, skinMat, 0, kim ? 0.152 : 0.158, kim ? 0.162 : 0.165, 1.1, 0.8, 0.9));   // nose tip
-  for (const side of [1, -1]) face.add(ball(0.03, skinMat, (kim ? 0.18 : 0.172) * side, 0.17, -0.01, 0.5, 1, 0.8));   // ears
+  for (const side of [1, -1]) face.add(ball(0.03, skinMat, (kim ? 0.188 : 0.172) * side, 0.165, -0.01, 0.5, 1, 0.8));   // ears
   for (const side of [1, -1]){ const tp = box(0.07, 0.006, 0.006, darkMat, (kim ? 0.15 : 0.14) * side, 0.21, 0.12); tp.rotation.y = -1.1 * side; face.add(tp); }   // glasses temples
   if (kim){
     // the cut: a trapezoid block of hair standing on a high shaved line, longer front-to-back, with a swept-up front
-    const hair = new T.Mesh(HAIR_KIM, hairMat); hair.scale.set(0.175, 0.085, 0.165); hair.position.set(0, 0.33, -0.025); face.add(hair);
-    const front = new T.Mesh(HAIR_KIM, hairMat); front.scale.set(0.145, 0.03, 0.055); front.position.set(0, 0.351, 0.105); front.rotation.x = -0.12; face.add(front);
+    const hair = new T.Mesh(HAIR_KIM, hairMat); hair.scale.set(0.168, 0.15, 0.158); hair.position.set(0, 0.285, -0.012); hair.rotation.x = 0.07; face.add(hair);
   } else {
     // black cap: dome, band, half-disc brim and a white S on the front
     const dome = new T.Mesh(DOME, capMat); dome.scale.set(0.186, 0.17, 0.186); dome.position.set(0, 0.235, 0); face.add(dome);
@@ -998,7 +1005,7 @@ function makeFigure(kind, hex, isMe){
     const ring = new T.Mesh(new T.RingGeometry(0.46, 0.52, 40), new T.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0.85, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.016; g.add(ring);
   }
-  return { g, body, head, abd, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], eyes: [], mats: [top, faceMat] };
+  return { g, body, head, abd, hip, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], eyes: [], mats: [top, faceMat] };
 }
 
 function nameCanvas(name, isMe){
@@ -1135,7 +1142,7 @@ class Avatar {
       P.head.rotation.x = Math.sin(t * 1.3 + this.seed) * 0.03;
     }
     if (this.sitting){
-      by = SEAT_Y - HIP + 0.03;
+      by = SEAT_Y - P.hip + 0.03;
       P.legL.rotation.x = P.legR.rotation.x = -1.45;
       P.kneeL.rotation.x = P.kneeR.rotation.x = 1.35;
       P.armL.rotation.x = P.armR.rotation.x = -0.45;
