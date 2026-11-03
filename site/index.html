@@ -211,11 +211,11 @@ const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: r
    Market data, computed exactly like korulive.com's cards:
    - korulive anchor, every 60 s (its cron runs once a minute, CDN cached)
    - Hyperliquid metaAndAssetCtxs (main perps), every 10 s: markPx and prevDayPx of BTC, ETH
-   - Hyperliquid metaAndAssetCtxs dex "xyz", every 10 s: markPx of xyz:KR200 (for the KOSPI tape)
+   - Upbit ticker (KRW-BTC, KRW-ETH, KRW-USDT), every 10 s: domestic won prices for the tape and 김프
    - Hyperliquid candleSnapshot 1m, every 60 s (the live candle follows each 10 s mark in between)
    FX (환율)  = usdtKrwLive × usdKrwAnchor / usdtKrwAnchor   (korulive's synthetic rate)
    Coin won   = markPx × FX;  change = (markPx / prevDayPx - 1) × 100  (vs 24 h ago)
-   KOSPI      = KR200 mark × kospiClose / kospi200Close;  change = (KR200 mark / kospi200Close - 1) × 100
+   김프       = Upbit won price / (Hyperliquid markPx × usdKrwAnchor) - 1
    ------------------------------------------------------------------ */
 const STOCKS = [
   { code: 'BTC', short: '비트', coin: 'BTC', name: '비트코인', pair: 'BTC/USDC', mark: null, prev: null, candles: [] },
@@ -230,11 +230,14 @@ function cleanAvg(a){
 }
 const HL_INFO = 'https://api.hyperliquid.xyz/info';
 const KORU_ANCHOR = 'https://api.korulive.com/anchor';
-const KR200 = 'xyz:KR200';
+const UPBIT = 'https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH,KRW-USDT';
+const UP_KEYS = ['BTC', 'ETH', 'USDT'];
 const POLL_MS = 10000, ANCHOR_MS = 60000, CANDLE_MS = 60000, CANDLE_INT = 60000, CANDLE_SPAN = 75;
 const KST = 9 * 3600 * 1000;
 
-const M = { usdt: null, kr200: null, anchor: null, hlAt: 0, anchorAt: 0, started: Date.now(), dirty: true };
+const M = { usdt: null, usdKrw: null, anchor: null, hlAt: 0, anchorAt: 0, started: Date.now(), dirty: true };
+// Upbit won prices: { p, pct (24h, signed) } per coin
+const U = { BTC: null, ETH: null, USDT: null, at: 0 };
 function markDirty(){ M.dirty = true; }
 function numOrNull(v){ const x = parseFloat(v); return isFinite(x) ? x : null; }
 function parseCandle(c){
@@ -286,26 +289,32 @@ function liveCandle(s){
     last.c = px; if (px > last.h) last.h = px; if (px < last.l) last.l = px;
   }
 }
-// markPx (and prevDayPx) of BTC/ETH from the main perps, and KR200 from the xyz dex, in parallel
-function ctxLookup(d){
-  const meta = d && d[0], ctxs = d && d[1];
-  if (!meta || !Array.isArray(meta.universe) || !Array.isArray(ctxs)) return null;
-  return name => { const i = meta.universe.findIndex(u => u.name === name); return i >= 0 && ctxs[i] ? ctxs[i] : null; };
-}
+// markPx (and prevDayPx) of BTC/ETH from the main perps, one call
 async function pollMark(){
   try {
-    const [main, xyz] = await Promise.all([
-      hlPost({ type: 'metaAndAssetCtxs' }).catch(() => null),
-      hlPost({ type: 'metaAndAssetCtxs', dex: 'xyz' }).catch(() => null),
-    ]);
-    const mainOf = ctxLookup(main), xyzOf = ctxLookup(xyz);
+    const d = await hlPost({ type: 'metaAndAssetCtxs' });
+    const meta = d && d[0], ctxs = d && d[1];
+    if (!meta || !Array.isArray(meta.universe) || !Array.isArray(ctxs)) return;
+    const ctxOf = name => { const i = meta.universe.findIndex(u => u.name === name); return i >= 0 && ctxs[i] ? ctxs[i] : null; };
     let got = false;
-    if (mainOf) for (const s of STOCKS){
-      const c = mainOf(s.coin), m = c ? numOrNull(c.markPx) : null;
+    for (const s of STOCKS){
+      const c = ctxOf(s.coin), m = c ? numOrNull(c.markPx) : null;
       if (m != null){ s.mark = m; s.prev = numOrNull(c.prevDayPx) ?? s.prev; liveCandle(s); got = true; }
     }
-    if (xyzOf){ const c = xyzOf(KR200), m = c ? numOrNull(c.markPx) : null; if (m != null) M.kr200 = m; }
     if (got){ M.hlAt = Date.now(); markDirty(); }
+  } catch (e) {}
+}
+// Upbit: domestic won prices of BTC, ETH and USDT with their 24 h change
+async function pollUpbit(){
+  try {
+    const d = await getJSON(UPBIT);
+    if (!Array.isArray(d)) return;
+    for (const t of d){
+      const k = typeof t.market === 'string' ? t.market.replace('KRW-', '') : '';
+      const p = numOrNull(t.trade_price), pct = numOrNull(t.signed_change_rate);
+      if (UP_KEYS.includes(k) && p != null) U[k] = { p, pct: pct == null ? null : pct * 100 };
+    }
+    U.at = Date.now(); markDirty();
   } catch (e) {}
 }
 // korulive anchor: KRX closes, KOSPI and KOSPI200 closes, and the synthetic USD/KRW rate
@@ -314,37 +323,33 @@ async function pollAnchor(){
     const a = await getJSON(KORU_ANCHOR), pos = v => (typeof v === 'number' && v > 0 ? v : null);
     if (!a || typeof a !== 'object') return;
     M.anchor = {
-      kospiClose: pos(a.kospiClose),
-      kospi200Close: pos(a.kospi200Close),
       fxPct: typeof a.usdtKrwLivePct24h === 'number' && isFinite(a.usdtKrwLivePct24h) ? a.usdtKrwLivePct24h : null,
     };
     const live = pos(a.usdtKrwLive) ?? pos(a.usdtKrwAnchor), usdK = pos(a.usdKrwAnchor), usdtK = pos(a.usdtKrwAnchor);
     if (live) M.usdt = usdK && usdtK ? live * usdK / usdtK : live;
+    if (usdK) M.usdKrw = usdK;
     M.anchorAt = Date.now();
     markDirty();
   } catch (e) {}
 }
 function signDir(pct){ return pct == null || Math.abs(pct) < 0.005 ? 'flat' : pct > 0 ? 'up' : 'down'; }
-function kospiView(){
-  const a = M.anchor;
-  if (!a || !a.kospiClose || !a.kospi200Close || M.kr200 == null) return null;
-  const v = M.kr200 * a.kospiClose / a.kospi200Close, pct = (M.kr200 / a.kospi200Close - 1) * 100;
-  return { v, pct, dir: signDir(pct) };
-}
-// 환율 is the same synthetic rate the stock prices use
-function fxView(){
-  if (M.usdt == null) return null;
-  const pct = M.anchor ? M.anchor.fxPct : null;
-  return { v: M.usdt, pct, dir: signDir(pct) };
+// 김프: Upbit won price over the Hyperliquid mark converted at the USD/KRW anchor rate
+function kimp(code){
+  const u = U[code], s = STOCK_BY[code], r = M.usdKrw ?? M.usdt;
+  if (!u || !s || s.mark == null || !r) return null;
+  const pct = (u.p / (s.mark * r) - 1) * 100;
+  return { pct, dir: signDir(pct) };
 }
 const pollPrices = () => { if (!document.hidden) once('mark', pollMark); };
 const pollChart = () => { if (!document.hidden) once('candles', pollCandles); };
 const pollRefs = () => { if (!document.hidden) once('anchor', pollAnchor); };
-pollChart(); pollPrices(); pollRefs();
+const pollKr = () => { if (!document.hidden) once('upbit', pollUpbit); };
+pollChart(); pollPrices(); pollRefs(); pollKr();
 setInterval(pollPrices, POLL_MS);
+setInterval(pollKr, POLL_MS);
 setInterval(pollChart, CANDLE_MS);
 setInterval(pollRefs, ANCHOR_MS);
-document.addEventListener('visibilitychange', () => { if (!document.hidden){ pollPrices(); pollChart(); pollRefs(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden){ pollPrices(); pollChart(); pollRefs(); pollKr(); } });
 
 function status(){
   const now = Date.now();
@@ -408,9 +413,11 @@ function runs(x, parts, X, Y, align){
 
 // two equal panels (비트코인 | 이더리움) over one shared footer
 const BW = 2600, BH = 1270, PANEL = BW / 2, HEAD = 236, FOOT = BH - 88;
-const bc = document.createElement('canvas'); bc.width = BW; bc.height = BH;
-const bx = bc.getContext('2d');
-const boardDots = ledPattern(bx, 5, 0.42);
+// canvases are drawn at 2x their logical size so the text stays crisp up close
+const HD = 2;
+const bc = document.createElement('canvas'); bc.width = BW * HD; bc.height = BH * HD;
+const bx = bc.getContext('2d'); bx.setTransform(HD, 0, 0, HD, 0, 0);
+const boardDots = ledPattern(bx, 5, 0.22);
 const DISCLAIMER = '하이퍼리퀴드 BTC/USDC·ETH/USDC 무기한 선물 가격을 원화로 바꾼 값이며, 국내 거래소 시세와 달라요.';
 let roomCount = 0, roomState = 'connecting';
 
@@ -521,22 +528,34 @@ function drawBoard(){
   x.fillStyle = boardDots; x.fillRect(0, 0, BW, BH);
 }
 
-const tc = document.createElement('canvas'); tc.height = 80; tc.width = 2400;
+const TH = 80;
+const tc = document.createElement('canvas'); tc.height = TH * HD; tc.width = 2400 * HD;
 const tx = tc.getContext('2d');
-const tickerDots = ledPattern(tx, 5, 0.42);
-const nf1 = new Intl.NumberFormat('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const tickerDots = ledPattern(tx, 5, 0.22);
 function tickerParts(){
-  const k = kospiView(), f = fxView(), parts = [];
+  const parts = [];
   const lbl = t => ({ t, f: '600 34px ' + UI, c: COL.led }), mut = t => ({ t, f: '500 30px ' + UI, c: COL.muted });
   const num = (t, c) => ({ t, f: '42px ' + LED, c: c || COL.text }), gap = { t: '        ', f: '42px ' + LED, c: COL.ink };
-  parts.push(lbl('추정 코스피 '));
-  if (k) parts.push(num(nf1.format(k.v) + ' ', COL[k.dir]), num(arrow(k.dir) + fmtPct(k.pct), COL[k.dir]), mut(' 마감 대비'));
-  else parts.push(num('–', COL.muted));
-  parts.push(gap, lbl('추정 환율 '));
-  if (f){
-    parts.push(num(nf1.format(f.v), COL[f.dir]), mut('원 '));
-    if (f.pct != null) parts.push(num(arrow(f.dir) + fmtPct(f.pct), COL[f.dir]), mut(' 24시간'));
-  } else parts.push(num('–', COL.muted));
+  // Upbit won prices: 비트코인 · 이더리움 · 테더, each with its 24 h change
+  parts.push(lbl('업비트 '));
+  [['BTC', '비트코인 '], ['ETH', '이더리움 '], ['USDT', '테더 ']].forEach(([k, name], i) => {
+    const u = U[k];
+    if (i) parts.push(mut('  ·  '));
+    parts.push(lbl(name));
+    if (u){
+      const d = signDir(u.pct);
+      parts.push(num(won(u.p), COL[d]), mut('원'));
+      if (u.pct != null) parts.push(mut(' '), num(arrow(d) + fmtPct(u.pct), COL[d]));
+    } else parts.push(num('–', COL.muted));
+  });
+  // 김프 for both coins
+  parts.push(gap, lbl('김프 '));
+  [['BTC', '비트 '], ['ETH', '이더 ']].forEach(([k, name], i) => {
+    const kp = kimp(k);
+    if (i) parts.push(mut('  ·  '));
+    parts.push(mut(name));
+    parts.push(kp ? num(arrow(kp.dir) + fmtPct(kp.pct), COL[kp.dir]) : num('–', COL.muted));
+  });
   parts.push(gap);
   return parts;
 }
@@ -544,12 +563,13 @@ function drawTicker(){
   const x = tx, parts = tickerParts();
   let w = 40; for (const p of parts){ x.font = p.f; w += x.measureText(p.t).width; }
   w = Math.ceil(w);
-  if (Math.abs(tc.width - w) > 2){ tc.width = w; }
-  x.fillStyle = COL.ink; x.fillRect(0, 0, tc.width, tc.height);
+  if (Math.abs(tc.width - w * HD) > 2){ tc.width = w * HD; }
+  x.setTransform(HD, 0, 0, HD, 0, 0);   // resizing the canvas resets the context
+  x.fillStyle = COL.ink; x.fillRect(0, 0, w, TH);
   x.textBaseline = 'middle';
   runs(x, parts, 40, 43);
   x.textBaseline = 'alphabetic';
-  x.fillStyle = tickerDots; x.fillRect(0, 0, tc.width, tc.height);
+  x.fillStyle = tickerDots; x.fillRect(0, 0, w, TH);
 }
 
 /* ------------------------------------------------------------------
@@ -626,15 +646,15 @@ let floorMesh = null;
 })();
 
 function signTexture(text, w, h, font, color, bg){
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, w, h);
+  const c = document.createElement('canvas'); c.width = w * HD; c.height = h * HD;
+  const x = c.getContext('2d'); x.setTransform(HD, 0, 0, HD, 0, 0); x.fillStyle = bg; x.fillRect(0, 0, w, h);
   x.font = font; x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, h / 2 + 4);
   return canvasTex(c);
 }
 // two centered lines at the largest size where the longer one still fits the width
 function twoLineSign(lines, w, h, color, bg){
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, w, h);
+  const c = document.createElement('canvas'); c.width = w * HD; c.height = h * HD;
+  const x = c.getContext('2d'); x.setTransform(HD, 0, 0, HD, 0, 0); x.fillStyle = bg; x.fillRect(0, 0, w, h);
   let fs = 140; x.font = '700 ' + fs + 'px ' + UI;
   while (fs > 40 && Math.max(...lines.map(l => x.measureText(l).width)) > w - 110){ fs -= 2; x.font = '700 ' + fs + 'px ' + UI; }
   x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle';
