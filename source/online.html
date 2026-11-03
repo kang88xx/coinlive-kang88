@@ -1,0 +1,1661 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>코루라이브 객장</title>
+<meta name="theme-color" content="#0b0d0f">
+<meta name="description" content="하이퍼리퀴드 삼성전자·SK하이닉스 시세를 빗썸 테더 환율로 바꿔 큰 전광판에 띄우는 3D 객장.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: full-bleed 3D brokerage floor (객장) facing one big LED board; glass HUD pills on top, chat bar at the bottom.
+   Single dark look by choice: a night-time trading floor lit by the board. */
+:root{
+  color-scheme: dark;
+  --bg:#0b0d0f;
+  --glass:rgba(13,15,17,.76);
+  --line:rgba(236,231,220,.14);
+  --text:#ece7dc;
+  --muted:#a59f92;
+  --led:#ffb547;
+  --up:#ff4d57;
+  --down:#3f8cff;
+  --live:#3ad07a;
+  --err:#ff8a7a;
+  --font-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-led:"DotGothic16",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui);overflow:hidden;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+#app{position:fixed;inset:0;background:var(--bg)}
+#scene{display:block;width:100%;height:100%;touch-action:none;cursor:grab;outline:none}
+#scene.dragging{cursor:grabbing}
+
+.hud-top{position:absolute;top:0;left:0;right:0;display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px;
+  padding-top:calc(12px + env(safe-area-inset-top,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
+.pill{pointer-events:auto;display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 14px;border:1px solid var(--line);border-radius:999px;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.brand{padding-left:5px}
+/* exit back to korulive.com, inside the chip on its left like 산사's 나가기 */
+.exit{display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin-right:-2px;border-radius:50%;color:var(--text);text-decoration:none;flex:none;transition:background .15s ease}
+.exit:hover{background:rgba(236,231,220,.1)}
+.exit:focus-visible{outline:2px solid var(--led);outline-offset:1px}
+.exit svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand .mark{font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.brand .count{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+.dot.live{background:var(--live);box-shadow:0 0 0 3px rgba(58,208,122,.18)}
+.right{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--muted)}
+.avg-btn{appearance:none;font:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;gap:7px;white-space:nowrap}
+.avg-btn svg{width:16px;height:16px;fill:none;stroke:var(--led);stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.avg-btn:hover{border-color:rgba(255,181,71,.45)}
+.avg-btn:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+.avg-btn[aria-expanded="true"]{border-color:var(--led)}
+
+.avg-panel{position:absolute;top:calc(62px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(300px,calc(100vw - 32px));padding:16px;
+  border:1px solid var(--line);border-radius:18px;background:rgba(13,15,17,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 14px 40px rgba(0,0,0,.5)}
+.avg-title{margin:0 0 10px;font-weight:700;font-size:15px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:12px;background:rgba(236,231,220,.07)}
+.seg label{position:relative;display:block}
+.seg input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer}
+.seg span{display:block;text-align:center;padding:9px 6px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);transition:background .15s ease,color .15s ease}
+.seg input:checked + span{background:var(--text);color:#16140f}
+.seg input:focus-visible + span{outline:2px solid var(--led);outline-offset:1px}
+.avg-field{display:flex;align-items:center;gap:6px;margin-top:10px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.28);cursor:text}
+.avg-field:focus-within{border-color:var(--led)}
+.avg-field input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font:600 18px var(--font-ui);padding:11px 0;outline:none;font-variant-numeric:tabular-nums}
+.avg-field input::placeholder{color:var(--muted);font-weight:500}
+.avg-field span{color:var(--muted);font-size:14px}
+.avg-hint{margin:8px 2px 0;font-size:12px;line-height:1.5;color:var(--muted)}
+.avg-hint.err{color:var(--err)}
+.avg-actions{display:flex;gap:8px;margin-top:12px}
+.avg-actions button{flex:1;appearance:none;border:0;border-radius:12px;padding:11px 10px;font:600 14px var(--font-ui);cursor:pointer}
+.avg-actions button:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+.avg-actions .primary{background:var(--led);color:#1a1206}
+.avg-actions .ghost{background:rgba(236,231,220,.08);color:var(--text)}
+
+.hint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));margin:0;font-size:13px;color:var(--text);
+  background:rgba(13,15,17,.66);padding:7px 14px;border-radius:999px;white-space:nowrap;pointer-events:none;transition:opacity .8s ease}
+.hint.gone{opacity:0}
+
+/* chat bar at the bottom: what you type pops up over your ant for a few seconds */
+.chatbar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:min(560px,calc(100vw - 32px));display:flex;align-items:center;gap:6px;padding:5px 5px 5px 16px;border:1px solid var(--line);border-radius:999px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .15s ease}
+.chatbar:focus-within{border-color:rgba(255,181,71,.55)}
+.chatbar input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font:500 16px var(--font-ui);padding:8px 0;outline:none}
+.chatbar input::placeholder{color:var(--muted)}
+.chatbar input:disabled{cursor:default}
+.chatbar button{flex:none;appearance:none;border:0;width:38px;height:38px;border-radius:50%;background:var(--led);color:#1a1206;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.chatbar button:disabled{background:rgba(236,231,220,.1);color:var(--muted);cursor:default}
+.chatbar button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.chatbar button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom,0px));margin:0;width:max-content;max-width:calc(100vw - 32px);padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:rgba(12,14,16,.9);color:var(--text);font-size:13px;line-height:1.45;text-align:center;word-break:keep-all;pointer-events:none}
+/* tap someone's ant: report them (their words disappear from my screen for good) */
+.peer-card{position:absolute;top:calc(62px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(320px,calc(100vw - 32px));padding:16px;border:1px solid var(--line);border-radius:18px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.peer-name{margin:0 0 6px;font-weight:700;font-size:15px}
+.peer-note{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--muted);white-space:pre-line;word-break:keep-all}
+.peer-actions{display:flex;gap:8px}
+.peer-actions button{flex:1;appearance:none;border:0;border-radius:12px;padding:11px 10px;font:600 14px var(--font-ui);cursor:pointer}
+.peer-actions .ghost{background:rgba(236,231,220,.08);color:var(--text)}
+.peer-actions .danger{background:var(--err);color:#1f0805}
+.peer-actions button:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+.fail{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding-inline:max(16px,env(safe-area-inset-left,0px));font-size:15px;color:var(--muted);line-height:1.6}
+/* 정원(100명)이 다 찼을 때: 객장 대신 이 안내만 보이고, 자리가 나면 저절로 들어감 */
+.gate{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px max(16px,env(safe-area-inset-left,0px));background:var(--bg)}
+.gate-card{width:min(340px,100%);padding:26px 22px 20px;border:1px solid var(--line);border-radius:20px;background:var(--glass);text-align:center}
+.gate-title{margin:0 0 8px;font-size:19px;font-weight:700;letter-spacing:-.01em;word-break:keep-all}
+.gate-text{margin:0 0 20px;font-size:14px;line-height:1.65;color:var(--muted);white-space:pre-line;word-break:keep-all}
+.gate-exit{display:block;padding:12px 10px;border-radius:12px;background:var(--led);color:#1a1206;font-weight:600;text-decoration:none}
+.gate-exit:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* phones: smaller HUD so more of the floor stays tappable */
+@media (max-width:560px){
+  .hud-top{padding-top:calc(8px + env(safe-area-inset-top,0px));gap:6px}
+  .pill{min-height:32px;padding:4px 11px;gap:7px}
+  .brand{padding-left:4px}
+  .exit{width:26px;height:26px}
+  .exit svg{width:16px;height:16px}
+  .brand .mark{font-size:13px}
+  .brand .count{font-size:11.5px;gap:5px}
+  .dot{width:6px;height:6px}
+  .avg-btn{font-size:12px;gap:5px}
+  .avg-btn svg{width:13px;height:13px}
+  .avg-panel{top:calc(48px + env(safe-area-inset-top,0px))}
+  .chatbar{bottom:calc(8px + env(safe-area-inset-bottom,0px));padding:4px 4px 4px 14px}
+  .chatbar button{width:34px;height:34px}
+  .toast{bottom:calc(60px + env(safe-area-inset-bottom,0px));font-size:12px}
+  .peer-card{top:calc(48px + env(safe-area-inset-top,0px))}
+  .hint{bottom:calc(62px + env(safe-area-inset-bottom,0px));font-size:11.5px;padding:5px 11px}
+}
+@media (prefers-reduced-motion:reduce){ .hint,.chatbar,.seg span,.exit{transition:none} }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene" tabindex="0" aria-label="코루라이브 객장 3D 화면. 앞쪽 전광판에 삼성전자와 SK하이닉스 1분봉 차트가 원화로 나옵니다. 바닥을 누르면 이동하고, 의자를 누르면 앉습니다."></canvas>
+
+  <header class="hud-top">
+    <div class="pill brand">
+      <a class="exit" href="https://korulive.com/" aria-label="코루라이브로 돌아가기" title="코루라이브로 돌아가기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4"/><path d="M8 7.5 3.5 12 8 16.5"/></svg>
+      </a>
+      <span class="mark">코루라이브</span>
+      <span class="count"><span class="dot" id="dot"></span><span id="count">연결 중</span></span>
+    </div>
+    <div class="right">
+      <button type="button" class="pill avg-btn" id="avgBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="avgPanel">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg><span id="avgBtnText">평단 입력</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="avg-panel" id="avgPanel" role="dialog" aria-labelledby="avgTitle" hidden>
+    <form id="avgForm" novalidate>
+      <p class="avg-title" id="avgTitle">내 평단</p>
+      <div class="seg" role="radiogroup" aria-label="종목">
+        <label><input type="radio" name="avgStock" value="SMSN" id="avgSMSN" checked><span>삼성전자</span></label>
+        <label><input type="radio" name="avgStock" value="SKHX" id="avgSKHX"><span>SK하이닉스</span></label>
+      </div>
+      <label class="avg-field" for="avgPrice"><input id="avgPrice" name="avgPrice" inputmode="numeric" autocomplete="off" enterkeyhint="done" aria-describedby="avgHint"><span>원</span></label>
+      <p class="avg-hint" id="avgHint" aria-live="polite">만 원 단위 층으로 바꿔서 이름 위에 표시돼요. 224,000원이면 "삼전 22층"이에요.</p>
+      <div class="avg-actions">
+        <button type="button" class="ghost" id="avgClear">지우기</button>
+        <button type="submit" class="primary" id="avgSave">표시하기</button>
+      </div>
+    </form>
+  </div>
+
+  <p class="hint" id="hint">바닥을 눌러 이동 · 의자를 눌러 앉기 · 드래그로 둘러보기</p>
+
+  <form class="chatbar" id="chatBar" autocomplete="off">
+    <input id="chatInput" maxlength="80" enterkeyhint="send" placeholder="연결되면 쓸 수 있어요" aria-label="채팅 (Enter)" disabled>
+    <button type="submit" id="chatSend" aria-label="보내기" title="보내기" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13"/><path d="M13 6.5 18.5 12 13 17.5"/></svg>
+    </button>
+  </form>
+  <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
+
+  <div class="peer-card" id="peerCard" role="dialog" aria-labelledby="peerName" hidden>
+    <p class="peer-name" id="peerName"></p>
+    <p class="peer-note" id="peerNote"></p>
+    <div class="peer-actions">
+      <button type="button" class="ghost" id="peerClose">닫기</button>
+      <button type="button" class="danger" id="peerBlock">차단하기</button>
+    </div>
+  </div>
+
+  <div class="gate" id="gate" hidden>
+    <div class="gate-card" role="status" aria-live="polite">
+      <p class="gate-title" id="gateTitle">객장이 꽉 찼어요</p>
+      <p class="gate-text" id="gateText"></p>
+      <a class="gate-exit" href="https://korulive.com/">코루라이브로 돌아가기</a>
+    </div>
+  </div>
+  <div class="fail" id="fail" hidden><p>3D 화면을 불러오지 못했어요.<br>브라우저 설정에서 하드웨어 가속(WebGL)이 켜져 있는지 확인해 주세요.</p></div>
+  <p class="sr-only" id="sr"></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const $ = s => document.querySelector(s);
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ------------------------------------------------------------------
+   Market data, computed exactly like korulive.com's cards:
+   - korulive anchor, every 60 s (its cron runs once a minute, CDN cached)
+   - Hyperliquid metaAndAssetCtxs dex "xyz", every 10 s: markPx of xyz:SMSN, xyz:SKHX, xyz:KR200
+   - Hyperliquid candleSnapshot 1m, every 60 s (the live candle follows each 10 s mark in between)
+   FX (환율)  = usdtKrwLive × usdKrwAnchor / usdtKrwAnchor   (korulive's synthetic rate)
+   Stock won  = markPx × FX;  change = (won / samsungKsClose | hynixKsClose - 1) × 100
+   KOSPI      = KR200 mark × kospiClose / kospi200Close;  change = (KR200 mark / kospi200Close - 1) × 100
+   ------------------------------------------------------------------ */
+const STOCKS = [
+  { code: 'SMSN', short: '삼전', coin: 'xyz:SMSN', name: '삼성전자',  pair: 'SMSN/USDC', closeKey: 'samsungKsClose', mark: null, candles: [], close: null },
+  { code: 'SKHX', short: '하닉', coin: 'xyz:SKHX', name: 'SK하이닉스', pair: 'SKHX/USDC', closeKey: 'hynixKsClose', mark: null, candles: [], close: null },
+];
+const STOCK_BY = { SMSN: STOCKS[0], SKHX: STOCKS[1] };
+function hasOwn(o, k){ return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }
+const AVG_MAX = 1e9;
+// a 평단 is { s: 'SMSN' | 'SKHX', p: won }; anything else is ignored
+function cleanAvg(a){
+  return a && typeof a === 'object' && hasOwn(STOCK_BY, a.s) && Number.isInteger(a.p) && a.p >= 1e4 && a.p <= AVG_MAX ? { s: a.s, p: a.p } : null;
+}
+const HL_INFO = 'https://api.hyperliquid.xyz/info';
+const KORU_ANCHOR = 'https://api.korulive.com/anchor';
+const KR200 = 'xyz:KR200';
+const POLL_MS = 10000, ANCHOR_MS = 60000, CANDLE_MS = 60000, CANDLE_INT = 60000, CANDLE_SPAN = 75;
+const KST = 9 * 3600 * 1000;
+
+const M = { usdt: null, kr200: null, anchor: null, hlAt: 0, anchorAt: 0, started: Date.now(), dirty: true };
+function markDirty(){ M.dirty = true; }
+function numOrNull(v){ const x = parseFloat(v); return isFinite(x) ? x : null; }
+function parseCandle(c){
+  if (!c || typeof c.t !== 'number') return null;
+  const o = +c.o, h = +c.h, l = +c.l, cl = +c.c, v = +c.v;
+  if (!(o > 0 && h > 0 && l > 0 && cl > 0)) return null;
+  return { t: c.t, o, h, l, c: cl, v: isFinite(v) ? v : 0 };
+}
+// every request gives up after 8 s, so a stalled network can't leave requests piling up
+async function getJSON(url, opts){
+  const ac = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ac ? setTimeout(() => ac.abort(), 8000) : 0;
+  try {
+    const r = await fetch(url, Object.assign({ cache: 'no-store' }, opts, ac ? { signal: ac.signal } : null));
+    if (!r.ok) throw new Error(url + ' HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+function hlPost(body){
+  return getJSON(HL_INFO, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+// at most one request of each kind in flight, so a slow, late answer can't overwrite a newer one
+const inFlight = {};
+async function once(kind, fn){
+  if (inFlight[kind]) return;
+  inFlight[kind] = true;
+  try { await fn(); } finally { inFlight[kind] = false; }
+}
+// 1-minute candles
+async function pollCandles(){
+  const now = Date.now();
+  await Promise.all(STOCKS.map(async s => {
+    try {
+      const d = await hlPost({ type: 'candleSnapshot', req: { coin: s.coin, interval: '1m', startTime: now - CANDLE_SPAN * CANDLE_INT, endTime: now } });
+      if (Array.isArray(d)){ s.candles = d.map(parseCandle).filter(Boolean).sort((a, b) => a.t - b.t); liveCandle(s); markDirty(); }
+    } catch (e) {}
+  }));
+}
+// move the current minute's candle with the latest price, opening a new one when the minute rolls over
+function liveCandle(s){
+  const px = s.mark;
+  if (px == null || !s.candles.length) return;
+  const t = Math.floor(Date.now() / CANDLE_INT) * CANDLE_INT;
+  const last = s.candles[s.candles.length - 1];
+  if (last.t < t){
+    s.candles.push({ t, o: last.c, h: Math.max(last.c, px), l: Math.min(last.c, px), c: px, v: 0 });
+    if (s.candles.length > 120) s.candles.splice(0, s.candles.length - 120);
+  } else if (last.t === t){
+    last.c = px; if (px > last.h) last.h = px; if (px < last.l) last.l = px;
+  }
+}
+// markPx of both stocks and KR200, one call
+async function pollMark(){
+  try {
+    const d = await hlPost({ type: 'metaAndAssetCtxs', dex: 'xyz' });
+    const meta = d && d[0], ctxs = d && d[1];
+    if (!meta || !Array.isArray(meta.universe) || !Array.isArray(ctxs)) return;
+    const markOf = name => { const i = meta.universe.findIndex(u => u.name === name); return i >= 0 && ctxs[i] ? numOrNull(ctxs[i].markPx) : null; };
+    let got = false;
+    for (const s of STOCKS){ const m = markOf(s.coin); if (m != null){ s.mark = m; liveCandle(s); got = true; } }
+    M.kr200 = markOf(KR200) ?? M.kr200;
+    if (got){ M.hlAt = Date.now(); markDirty(); }
+  } catch (e) {}
+}
+// korulive anchor: KRX closes, KOSPI and KOSPI200 closes, and the synthetic USD/KRW rate
+async function pollAnchor(){
+  try {
+    const a = await getJSON(KORU_ANCHOR), pos = v => (typeof v === 'number' && v > 0 ? v : null);
+    if (!a || typeof a !== 'object') return;
+    M.anchor = {
+      kospiClose: pos(a.kospiClose),
+      kospi200Close: pos(a.kospi200Close),
+      fxPct: typeof a.usdtKrwLivePct24h === 'number' && isFinite(a.usdtKrwLivePct24h) ? a.usdtKrwLivePct24h : null,
+    };
+    const live = pos(a.usdtKrwLive) ?? pos(a.usdtKrwAnchor), usdK = pos(a.usdKrwAnchor), usdtK = pos(a.usdtKrwAnchor);
+    if (live) M.usdt = usdK && usdtK ? live * usdK / usdtK : live;
+    for (const s of STOCKS) s.close = pos(a[s.closeKey]) ?? s.close;
+    M.anchorAt = Date.now();
+    markDirty();
+  } catch (e) {}
+}
+function signDir(pct){ return pct == null || Math.abs(pct) < 0.005 ? 'flat' : pct > 0 ? 'up' : 'down'; }
+function kospiView(){
+  const a = M.anchor;
+  if (!a || !a.kospiClose || !a.kospi200Close || M.kr200 == null) return null;
+  const v = M.kr200 * a.kospiClose / a.kospi200Close, pct = (M.kr200 / a.kospi200Close - 1) * 100;
+  return { v, pct, dir: signDir(pct) };
+}
+// 환율 is the same synthetic rate the stock prices use
+function fxView(){
+  if (M.usdt == null) return null;
+  const pct = M.anchor ? M.anchor.fxPct : null;
+  return { v: M.usdt, pct, dir: signDir(pct) };
+}
+const pollPrices = () => { if (!document.hidden) once('mark', pollMark); };
+const pollChart = () => { if (!document.hidden) once('candles', pollCandles); };
+const pollRefs = () => { if (!document.hidden) once('anchor', pollAnchor); };
+pollChart(); pollPrices(); pollRefs();
+setInterval(pollPrices, POLL_MS);
+setInterval(pollChart, CANDLE_MS);
+setInterval(pollRefs, ANCHOR_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden){ pollPrices(); pollChart(); pollRefs(); } });
+
+function status(){
+  const now = Date.now();
+  const hl = now - M.hlAt < 35000, an = now - M.anchorAt < 150000;
+  if (hl && an) return 'live';
+  if (now - M.started < 9000) return 'connecting';
+  return (hl || an) ? 'partial' : 'down';
+}
+const STATUS_TEXT = { live: '10초마다 갱신', connecting: '연결 중', partial: '일부 지연', down: '연결 안 됨' };
+
+function view(s){
+  const px = s.mark, r = M.usdt;
+  // the shown price is floored to 100원; the % uses the unfloored price, as korulive.com's cards do
+  const raw = px != null && r != null ? px * r : null, p = raw != null ? floor100(raw) : null;
+  const chg = p != null && s.close ? p - s.close : null;
+  const pct = raw != null && s.close ? (raw / s.close - 1) * 100 : null;
+  return { px, p, pct, chg, dir: signDir(pct) };
+}
+
+// 삼성전자·SK하이닉스 won prices are floored to 100원, like korulive.com (live price and every candle's O/H/L/C)
+function floor100(v){ return Math.floor(v / 100) * 100; }
+const nf0 = new Intl.NumberFormat('ko-KR');
+const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function won(v){ return nf0.format(Math.round(v)); }
+function fmtPct(p){ return (p > 0 ? '+' : p < 0 ? '-' : '') + Math.abs(p).toFixed(2) + '%'; }
+function arrow(d){ return d === 'up' ? '▲' : d === 'down' ? '▼' : '-'; }
+function kstTime(ms){ return new Date(ms + KST).toISOString().substr(11, 8); }
+function kstHM(ms){ return new Date(ms + KST).toISOString().substr(11, 5); }
+function niceStep(raw){ const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+
+/* ------------------------------------------------------------------
+   LED board + ticker tape (2D canvases used as textures)
+   ------------------------------------------------------------------ */
+const LED = '"DotGothic16", ui-monospace, Menlo, monospace';
+const UI  = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+const COL = { up:'#ff4d57', down:'#3f8cff', flat:'#c9c3b6', led:'#ffb547', live:'#3ad07a', muted:'#8f897d', grid:'rgba(236,231,220,0.09)', text:'#ece7dc', panel:'#0a0c0e', ink:'#050607', rule:'rgba(255,181,71,0.28)' };
+
+function rrect(x, X, Y, W, H, r){
+  x.beginPath(); x.moveTo(X + r, Y); x.lineTo(X + W - r, Y); x.quadraticCurveTo(X + W, Y, X + W, Y + r);
+  x.lineTo(X + W, Y + H - r); x.quadraticCurveTo(X + W, Y + H, X + W - r, Y + H); x.lineTo(X + r, Y + H);
+  x.quadraticCurveTo(X, Y + H, X, Y + H - r); x.lineTo(X, Y + r); x.quadraticCurveTo(X, Y, X + r, Y); x.closePath();
+}
+function ledPattern(ctx, size, alpha){
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(0,0,0,' + alpha + ')'; x.fillRect(0, 0, size, size);
+  x.globalCompositeOperation = 'destination-out';
+  x.beginPath(); x.arc(size / 2, size / 2, size * 0.37, 0, Math.PI * 2); x.fill();
+  return ctx.createPattern(c, 'repeat');
+}
+// draw text runs that mix the LED face (digits) and the UI face (Hangul units)
+function runs(x, parts, X, Y, align){
+  let w = 0;
+  for (const p of parts){ x.font = p.f; w += x.measureText(p.t).width; }
+  let cx = align === 'right' ? X - w : align === 'center' ? X - w / 2 : X;
+  x.textAlign = 'left';
+  for (const p of parts){ x.font = p.f; x.fillStyle = p.c; x.fillText(p.t, cx, Y); cx += x.measureText(p.t).width; }
+  return w;
+}
+
+// two equal panels (삼성전자 | SK하이닉스) over one shared footer
+const BW = 2600, BH = 1270, PANEL = BW / 2, HEAD = 236, FOOT = BH - 88;
+const bc = document.createElement('canvas'); bc.width = BW; bc.height = BH;
+const bx = bc.getContext('2d');
+const boardDots = ledPattern(bx, 5, 0.42);
+const DISCLAIMER = '해외 코인 거래소의 SMSN/USDC·SKHX/USDC 가격이며, 실제 삼성전자·SK하이닉스 가격이 아니에요.';
+let roomCount = 0, roomState = 'connecting';
+
+function drawPanel(x, ox, s, st, nowMs){
+  const v = view(s), r = M.usdt;
+  x.textAlign = 'left';
+
+  // header, two rows: name + pair, then the big price + change vs KRX close
+  x.fillStyle = COL.panel; x.fillRect(ox, 0, PANEL, HEAD);
+  x.font = '700 64px ' + UI; x.fillStyle = COL.text; x.fillText(s.name, ox + 44, 80);
+  const nameW = x.measureText(s.name).width;
+  // pair one step below the name, then the live USD mark: "SMSN/USDC  $170.71"
+  x.font = '500 48px ' + UI; x.fillStyle = COL.muted;
+  const pairX = ox + 44 + nameW + 24;
+  x.fillText(s.pair, pairX, 80);
+  if (s.mark != null){
+    const usdX = pairX + x.measureText(s.pair).width + 26;
+    x.fillText('$' + usd.format(s.mark), usdX, 80);   // same face, size and color as the pair
+  }
+  if (v.p != null){
+    const pw = runs(x, [{ t: won(v.p), f: '140px ' + LED, c: COL[v.dir] }, { t: '원', f: '600 56px ' + UI, c: COL[v.dir] }], ox + 40, 214);
+    if (v.pct != null){
+      const cx = ox + 40 + pw + 40, txt = arrow(v.dir) + ' ' + won(Math.abs(v.chg)) + '  ' + fmtPct(v.pct);
+      let fs = 54; x.font = fs + 'px ' + LED;
+      while (fs > 30 && cx + x.measureText(txt).width > ox + PANEL - 28){ fs -= 2; x.font = fs + 'px ' + LED; }
+      x.fillStyle = COL[v.dir]; x.fillText(txt, cx, 170);
+      x.font = '500 30px ' + UI; x.fillStyle = COL.muted; x.fillText('정규장 마감 대비', cx, 212);
+    }
+  } else {
+    x.font = '600 48px ' + UI; x.fillStyle = COL.muted;
+    x.fillText(st === 'down' ? '시세 서버에 연결할 수 없어요' : '시세 받는 중…', ox + 44, 190);
+  }
+
+  // 1-minute candle chart: USD candles in won at the current rate, each of O/H/L/C floored to 100원
+  const X0 = ox + 40, X1 = ox + PANEL - 220, Y0 = 306, Y1 = 900, V0 = 960, V1 = 1080;
+  const cs = r == null ? [] : s.candles.slice(-60).map(k => ({
+    t: k.t, o: floor100(k.o * r), h: floor100(k.h * r), l: floor100(k.l * r), c: floor100(k.c * r), v: k.v,
+  }));
+  if (cs.length){
+    let hi = -Infinity, lo = Infinity, vmax = 0;
+    for (const k of cs){ if (k.h > hi) hi = k.h; if (k.l < lo) lo = k.l; if (k.v > vmax) vmax = k.v; }
+    if (v.p != null){ hi = Math.max(hi, v.p); lo = Math.min(lo, v.p); }
+    const pad = (hi - lo) * 0.12 || hi * 0.002; hi += pad; lo -= pad;
+    const yOf = p => Y1 - (p - lo) / (hi - lo) * (Y1 - Y0);
+    const step = niceStep((hi - lo) / 5);
+    x.font = '34px ' + LED; x.lineWidth = 1;
+    const yNow = v.p != null ? yOf(v.p) : -999;
+    for (let val = Math.ceil(lo / step) * step; val <= hi; val += step){
+      const y = Math.round(yOf(val)) + 0.5;
+      x.strokeStyle = COL.grid; x.beginPath(); x.moveTo(X0, y); x.lineTo(X1, y); x.stroke();
+      if (Math.abs(y - yNow) > 40){ x.fillStyle = COL.muted; x.fillText(won(val), X1 + 16, y + 12); }
+    }
+    x.font = '500 30px ' + UI; x.fillStyle = COL.muted; x.fillText('1분봉 · 원', X0, Y0 - 22); x.fillText('거래량 (주)', X0, V0 - 14);
+    x.fillStyle = COL.grid; x.fillRect(X0, V1 + 1, X1 - X0, 1);
+    const n = 60, cw = (X1 - X0) / n, bw = Math.max(3, cw * 0.62), off = n - cs.length;
+    cs.forEach((k, i) => {
+      const cx = Math.round(X0 + cw * (i + off) + cw / 2), d = k.c >= k.o ? 'up' : 'down';
+      x.strokeStyle = x.fillStyle = COL[d]; x.lineWidth = 3;
+      x.beginPath(); x.moveTo(cx, yOf(k.h)); x.lineTo(cx, yOf(k.l)); x.stroke();
+      const yt = yOf(Math.max(k.o, k.c)), yb = yOf(Math.min(k.o, k.c));
+      x.fillRect(cx - bw / 2, yt, bw, Math.max(3, yb - yt));
+      if (vmax > 0){ const vh = Math.max(2, k.v / vmax * (V1 - V0 - 20)); x.globalAlpha = 0.5; x.fillRect(cx - bw / 2, V1 - vh, bw, vh); x.globalAlpha = 1; }
+      if (Math.round(k.t / CANDLE_INT) % 10 === 0){
+        x.font = '32px ' + LED; x.fillStyle = COL.muted; x.textAlign = 'center'; x.fillText(kstHM(k.t), cx, V1 + 46); x.textAlign = 'left';
+      }
+    });
+    if (v.p != null){
+      const yc = Math.round(yOf(v.p)) + 0.5;
+      x.setLineDash([12, 9]); x.strokeStyle = COL[v.dir]; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(X0, yc); x.lineTo(X1, yc); x.stroke(); x.setLineDash([]);
+      x.font = '34px ' + LED; const tw = x.measureText(won(v.p)).width + 20;
+      x.fillStyle = COL[v.dir]; x.fillRect(X1 + 6, yc - 25, tw, 50);
+      x.fillStyle = COL.ink; x.fillText(won(v.p), X1 + 16, yc + 12);
+    }
+  } else {
+    x.font = '600 40px ' + UI; x.fillStyle = COL.muted; x.textAlign = 'center';
+    x.fillText(st === 'down' ? '시세 서버에 연결하지 못했어요' : '차트 불러오는 중…', (X0 + X1) / 2, (Y0 + Y1) / 2);
+    if (st === 'down'){
+      x.font = '500 30px ' + UI;
+      x.fillText('잠시 후 자동으로 다시 연결해요.', (X0 + X1) / 2, (Y0 + Y1) / 2 + 58);
+    }
+    x.textAlign = 'left';
+  }
+}
+
+function drawBoard(){
+  const x = bx, st = status(), nowMs = Date.now();
+  x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+  x.fillStyle = COL.ink; x.fillRect(0, 0, BW, BH);
+  STOCKS.forEach((s, i) => drawPanel(x, i * PANEL, s, st, nowMs));
+  x.fillStyle = COL.rule; x.fillRect(0, HEAD, BW, 2); x.fillRect(PANEL - 1, 0, 2, FOOT);
+
+  // shared footer: who is here · clock and status (the price notice hangs on the wall above the tape)
+  x.fillStyle = COL.panel; x.fillRect(0, FOOT, BW, BH - FOOT);
+  x.fillStyle = COL.rule; x.fillRect(0, FOOT, BW, 2);
+  const fy = FOOT + 60;
+  x.font = '600 36px ' + UI; x.fillStyle = COL.led;
+  x.fillText(roomState === 'solo' ? '혼자 보는 중' : roomState === 'live' ? '지금 이 객장 ' + roomCount + '명' : roomState === 'full' ? '객장이 가득 찼어요' : '객장 연결 중', 40, fy);
+  x.textAlign = 'right'; x.font = '48px ' + LED; x.fillStyle = COL.led;
+  const clock = kstTime(nowMs) + ' KST'; x.fillText(clock, BW - 40, fy + 2);
+  const sx = BW - 40 - x.measureText(clock).width - 44;
+  x.font = '600 32px ' + UI; const stT = STATUS_TEXT[st], sw = x.measureText(stT).width;
+  x.fillStyle = st === 'live' ? COL.live : st === 'down' ? COL.muted : COL.led;
+  x.fillText(stT, sx, fy);
+  x.beginPath(); x.arc(sx - sw - 18, fy - 11, 8, 0, Math.PI * 2); x.fill();
+  x.textAlign = 'left';
+
+  x.fillStyle = boardDots; x.fillRect(0, 0, BW, BH);
+}
+
+const tc = document.createElement('canvas'); tc.height = 80; tc.width = 2400;
+const tx = tc.getContext('2d');
+const tickerDots = ledPattern(tx, 5, 0.42);
+const nf1 = new Intl.NumberFormat('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+function tickerParts(){
+  const k = kospiView(), f = fxView(), parts = [];
+  const lbl = t => ({ t, f: '600 34px ' + UI, c: COL.led }), mut = t => ({ t, f: '500 30px ' + UI, c: COL.muted });
+  const num = (t, c) => ({ t, f: '42px ' + LED, c: c || COL.text }), gap = { t: '        ', f: '42px ' + LED, c: COL.ink };
+  parts.push(lbl('추정 코스피 '));
+  if (k) parts.push(num(nf1.format(k.v) + ' ', COL[k.dir]), num(arrow(k.dir) + fmtPct(k.pct), COL[k.dir]), mut(' 마감 대비'));
+  else parts.push(num('–', COL.muted));
+  parts.push(gap, lbl('추정 환율 '));
+  if (f){
+    parts.push(num(nf1.format(f.v), COL[f.dir]), mut('원 '));
+    if (f.pct != null) parts.push(num(arrow(f.dir) + fmtPct(f.pct), COL[f.dir]), mut(' 24시간'));
+  } else parts.push(num('–', COL.muted));
+  parts.push(gap);
+  return parts;
+}
+function drawTicker(){
+  const x = tx, parts = tickerParts();
+  let w = 40; for (const p of parts){ x.font = p.f; w += x.measureText(p.t).width; }
+  w = Math.ceil(w);
+  if (Math.abs(tc.width - w) > 2){ tc.width = w; }
+  x.fillStyle = COL.ink; x.fillRect(0, 0, tc.width, tc.height);
+  x.textBaseline = 'middle';
+  runs(x, parts, 40, 43);
+  x.textBaseline = 'alphabetic';
+  x.fillStyle = tickerDots; x.fillRect(0, 0, tc.width, tc.height);
+}
+
+/* ------------------------------------------------------------------
+   Three.js scene
+   ------------------------------------------------------------------ */
+if (!window.THREE){ $('#fail').hidden = false; return; }
+const T = THREE;
+const canvas = $('#scene');
+let renderer;
+try {
+  renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) { $('#fail').hidden = false; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = T.sRGBEncoding;
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+const scene = new T.Scene();
+scene.background = new T.Color('#0b0d0f');
+scene.fog = new T.Fog('#0b0d0f', 28, 50);
+const camera = new T.PerspectiveCamera(55, 1, 0.1, 120);
+
+scene.add(new T.HemisphereLight(0xcfd6e0, 0x2a241c, 0.46));
+const keyLight = new T.DirectionalLight(0xfff1dc, 0.5); keyLight.position.set(4, 12, 8); scene.add(keyLight);
+const boardLight = new T.PointLight(0xffd9a0, 1.6, 30, 1.4); boardLight.position.set(0, 5.5, -7.2); scene.add(boardLight);
+
+function canvasTex(c, repeat){
+  const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = maxAniso;
+  if (repeat){ t.wrapS = t.wrapT = T.RepeatWrapping; }
+  return t;
+}
+
+// wide and tall enough for the enlarged front-wall board
+const ROOM = { x0: -11, x1: 11, z0: -10, z1: 14, h: 13 };
+const RW = ROOM.x1 - ROOM.x0, RD = ROOM.z1 - ROOM.z0, RZ = (ROOM.z0 + ROOM.z1) / 2;
+let floorMesh = null;
+(function buildRoom(){
+  const fc = document.createElement('canvas'); fc.width = fc.height = 256;
+  const f = fc.getContext('2d');
+  f.fillStyle = '#2c2925'; f.fillRect(0, 0, 256, 256);
+  const chips = ['#3a3530', '#221f1c', '#4a433b', '#5a3e31', '#6b6458']; let s = 7;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 1400; i++){ f.fillStyle = chips[(rnd() * chips.length) | 0]; f.beginPath(); f.arc(rnd() * 256, rnd() * 256, rnd() * 1.8 + 0.4, 0, Math.PI * 2); f.fill(); }
+  f.fillStyle = '#181613'; f.fillRect(0, 0, 256, 3); f.fillRect(0, 0, 3, 256);
+  const floorTex = canvasTex(fc, true); floorTex.repeat.set(RW / 2, RD / 2);
+  const floor = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ map: floorTex, roughness: 0.5, metalness: 0.06 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, RZ); scene.add(floor);
+  floorMesh = floor;
+
+  const wallMat = new T.MeshStandardMaterial({ color: '#13171a', roughness: 0.92 });
+  const woodMat = new T.MeshStandardMaterial({ color: '#2b211a', roughness: 0.7 });
+  const walls = [
+    { w: RW, pos: [0, ROOM.h / 2, ROOM.z0], ry: 0 },
+    { w: RD, pos: [ROOM.x0, ROOM.h / 2, RZ], ry: Math.PI / 2 },
+    { w: RD, pos: [ROOM.x1, ROOM.h / 2, RZ], ry: -Math.PI / 2 },
+    { w: RW, pos: [0, ROOM.h / 2, ROOM.z1], ry: Math.PI },
+  ];
+  walls.forEach(d => {
+    const m = new T.Mesh(new T.PlaneGeometry(d.w, ROOM.h), wallMat); m.position.set(...d.pos); m.rotation.y = d.ry; scene.add(m);
+    const band = new T.Mesh(new T.PlaneGeometry(d.w, 1.1), woodMat);
+    const off = new T.Vector3(0, 0, 0.02).applyAxisAngle(new T.Vector3(0, 1, 0), d.ry);
+    band.position.set(d.pos[0] + off.x, 0.55, d.pos[2] + off.z); band.rotation.y = d.ry; scene.add(band);
+  });
+  const ceil = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ color: '#111416', roughness: 1 }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(0, ROOM.h, RZ); scene.add(ceil);
+  const lampMat = new T.MeshBasicMaterial({ color: '#fff0d6' }), lampGeo = new T.PlaneGeometry(3.2, 0.32);
+  for (const lx of [-6.5, 0, 6.5]) for (const lz of [-5, 0, 5, 10]){
+    const l = new T.Mesh(lampGeo, lampMat); l.rotation.x = Math.PI / 2; l.position.set(lx, ROOM.h - 0.02, lz); scene.add(l);
+  }
+  const pilMat = new T.MeshStandardMaterial({ color: '#1a1f23', roughness: 0.85 }), pilGeo = new T.BoxGeometry(0.5, ROOM.h, 0.3);
+  // the bay between -1.5 and 4.5 is a little wider so the wall signs hang clear of the pillars
+  for (const pz of [-6.5, -1.5, 4.5, 9.5, 13.6]) for (const sx of [-1, 1]){
+    const p = new T.Mesh(pilGeo, pilMat); p.position.set(sx * (ROOM.x1 - 0.15), ROOM.h / 2, pz); p.rotation.y = Math.PI / 2; scene.add(p);
+  }
+})();
+
+function signTexture(text, w, h, font, color, bg){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, w, h);
+  x.font = font; x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, h / 2 + 4);
+  return canvasTex(c);
+}
+// two centered lines at the largest size where the longer one still fits the width
+function twoLineSign(lines, w, h, color, bg){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, w, h);
+  let fs = 140; x.font = '700 ' + fs + 'px ' + UI;
+  while (fs > 40 && Math.max(...lines.map(l => x.measureText(l).width)) > w - 110){ fs -= 2; x.font = '700 ' + fs + 'px ' + UI; }
+  x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle';
+  const gap = fs * 1.32;
+  lines.forEach((l, i) => x.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * gap + 4));
+  return canvasTex(c);
+}
+// a plaque sized to its text, in the same look as the side-wall notice
+function fittedSign(text, font, color, bg, planeH, maxW){
+  const m = document.createElement('canvas').getContext('2d'); m.font = font;
+  const cw = Math.ceil(m.measureText(text).width + 160), ch = 200;
+  let w = planeH * cw / ch, h = planeH;
+  if (w > maxW){ h *= maxW / w; w = maxW; }
+  return new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ map: signTexture(text, cw, ch, font, color, bg) }));
+}
+
+// front wall, bottom to top: two-panel board, KOSPI/FX tape, price notice
+const BOARD = { w: 8.4 * BW / BH, h: 8.4, y: 5.4, z: -9.86 };
+const TICKER = { w: BOARD.w, h: 0.87, y: BOARD.y + BOARD.h / 2 + 0.91 };
+const NOTICE = { y: TICKER.y + 1.2, h: 0.87 };
+
+const signs = [];
+function buildSigns(){
+  signs.forEach(s => { scene.remove(s); s.material.map.dispose(); s.material.dispose(); });
+  signs.length = 0;
+  // korulive green, darkened and softened so it reads like a painted sign in a dim room
+  const a = new T.Mesh(new T.PlaneGeometry(4.4, 1.1), new T.MeshBasicMaterial({
+    map: signTexture('코루라이브 객장', 1024, 256, '700 116px ' + UI, '#e8eee0', '#2f5a27') }));
+  a.position.set(ROOM.x0 + 0.07, 6.6, 1.5); a.rotation.y = Math.PI / 2;
+  // two lines, as large as the bay between the pillars allows
+  const b = new T.Mesh(new T.PlaneGeometry(5.0, 5.0 * 420 / 1024), new T.MeshBasicMaterial({
+    map: twoLineSign(['투자의 책임은', '투자자 본인에게 있습니다'], 1024, 420, '#ece7dc', '#16191b') }));
+  b.position.set(ROOM.x1 - 0.07, 6.6, 1.5); b.rotation.y = -Math.PI / 2;
+  const notice = fittedSign(DISCLAIMER, '600 76px ' + UI, '#ece7dc', '#16191b', NOTICE.h, BOARD.w);
+  notice.position.set(0, NOTICE.y, -9.95);
+  signs.push(a, b, notice); scene.add(a, b, notice);
+}
+buildSigns();
+
+
+const boardTex = canvasTex(bc);
+const board = new T.Mesh(new T.PlaneGeometry(BOARD.w, BOARD.h), new T.MeshBasicMaterial({ map: boardTex }));
+board.position.set(0, BOARD.y, BOARD.z); scene.add(board);
+const frameMat = new T.MeshStandardMaterial({ color: '#0e0f10', roughness: 0.4, metalness: 0.6 });
+const boardFrame = new T.Mesh(new T.BoxGeometry(BOARD.w + 0.5, BOARD.h + 0.5, 0.24), frameMat);
+boardFrame.position.set(0, BOARD.y, -9.99); scene.add(boardFrame);
+const gc = document.createElement('canvas'); gc.width = gc.height = 256;
+(function(){ const g = gc.getContext('2d'), grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)'); grd.addColorStop(0.55, 'rgba(255,255,255,0.25)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256); })();
+const glowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: new T.Color('#ffb547'), transparent: true, opacity: 0.45, blending: T.AdditiveBlending, depthWrite: false });
+const glow = new T.Mesh(new T.PlaneGeometry(Math.min(RW - 0.4, BOARD.w + 6), BOARD.h + 5), glowMat); glow.position.set(0, BOARD.y, -9.98); scene.add(glow);
+
+const tickerTex = canvasTex(tc, true);
+const ticker = new T.Mesh(new T.PlaneGeometry(TICKER.w, TICKER.h), new T.MeshBasicMaterial({ map: tickerTex }));
+ticker.position.set(0, TICKER.y, -9.86); scene.add(ticker);
+const tframe = new T.Mesh(new T.BoxGeometry(TICKER.w + 0.3, TICKER.h + 0.24, 0.2), frameMat); tframe.position.set(0, TICKER.y, -9.99); scene.add(tframe);
+
+// benches: 5 rows x 2 blocks, 4 seats each
+const SEAT_Y = 0.46;
+const ROWS = [-3.2, -1.6, 0, 1.6, 3.2], BLOCKS = [-3.4, 3.4], SLOT = [-1.875, -0.625, 0.625, 1.875];
+const seats = [], benches = [];
+ROWS.forEach(z => BLOCKS.forEach(bxp => { const bi = benches.length; benches.push({ x: bxp, z }); SLOT.forEach(o => seats.push({ x: bxp + o, z, bench: bi })); }));
+const seatMesh = new T.InstancedMesh(new T.BoxGeometry(5.2, 0.1, 0.52), new T.MeshStandardMaterial({ color: '#ffffff', roughness: 0.62 }), benches.length);
+const legMesh = new T.InstancedMesh(new T.BoxGeometry(0.12, SEAT_Y - 0.05, 0.42), new T.MeshStandardMaterial({ color: '#141618', roughness: 0.5, metalness: 0.5 }), benches.length * 2);
+const mtx = new T.Matrix4();
+benches.forEach((b, i) => {
+  mtx.makeTranslation(b.x, SEAT_Y - 0.05, b.z); seatMesh.setMatrixAt(i, mtx);
+  mtx.makeTranslation(b.x - 2.3, (SEAT_Y - 0.05) / 2, b.z); legMesh.setMatrixAt(i * 2, mtx);
+  mtx.makeTranslation(b.x + 2.3, (SEAT_Y - 0.05) / 2, b.z); legMesh.setMatrixAt(i * 2 + 1, mtx);
+});
+seatMesh.instanceMatrix.needsUpdate = true; legMesh.instanceMatrix.needsUpdate = true;
+// seats facing the board: right block a worn brick red (상승), left block a faded denim blue (하락),
+// each bench a touch lighter or darker so the rows read as real upholstery rather than flat paint
+const SEAT_UP = new T.Color('#a34a4f').convertSRGBToLinear(), SEAT_DOWN = new T.Color('#46669c').convertSRGBToLinear();
+const seatTint = new T.Color();
+benches.forEach((b, i) => {
+  seatTint.copy(b.x > 0 ? SEAT_UP : SEAT_DOWN).multiplyScalar(0.92 + ((i * 37) % 9) / 50);
+  seatMesh.setColorAt(i, seatTint);
+});
+seatMesh.instanceColor.needsUpdate = true;
+scene.add(seatMesh, legMesh);
+
+const marker = new T.Mesh(new T.RingGeometry(0.26, 0.34, 40), new T.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0, depthWrite: false }));
+marker.rotation.x = -Math.PI / 2; marker.position.y = 0.02; scene.add(marker);
+let markerT = 0;
+
+/* ------------------------------------------------------------------
+   Ant avatars
+   ------------------------------------------------------------------ */
+const BODY = ['#7d3a22', '#3d2c25', '#8a5a2a', '#5c2f39', '#2a2320', '#9a4328'];
+const SPH = new T.SphereGeometry(1, 24, 16);
+const LIMB = new T.CylinderGeometry(0.045, 0.038, 1, 8);
+const eyeMat = new T.MeshStandardMaterial({ color: '#f4f0e8', roughness: 0.3 });
+const pupilMat = new T.MeshStandardMaterial({ color: '#0d0c0b', roughness: 0.2 });
+const shadowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: '#000000', transparent: true, opacity: 0.55, depthWrite: false });
+const SHADOW_GEO = new T.PlaneGeometry(1.1, 1.1);
+
+function ball(r, mat, x, y, z, sx, sy, sz){
+  const m = new T.Mesh(SPH, mat); m.scale.set(r * (sx || 1), r * (sy || 1), r * (sz || 1)); m.position.set(x, y, z); return m;
+}
+function limb(len, mat, radius){
+  const m = new T.Mesh(LIMB, mat); m.scale.set(radius || 1, len, radius || 1); m.position.y = -len / 2; return m;
+}
+function makeAnt(bodyHex, isMe){
+  const mat = new T.MeshStandardMaterial({ color: bodyHex, roughness: 0.42, metalness: 0.08 });
+  const g = new T.Group(), body = new T.Group(); g.add(body);
+  const legs = [], arms = [], ants = [];
+  for (const side of [1, -1]){
+    const leg = new T.Group(); leg.position.set(0.11 * side, 0.42, 0);
+    leg.add(limb(0.42, mat)); leg.add(ball(0.07, mat, 0, -0.42, 0.03, 1, 0.6, 1.4)); body.add(leg); legs.push(leg);
+    const arm = new T.Group(); arm.position.set(0.19 * side, 0.86, 0);
+    const upper = limb(0.36, mat, 0.9), hand = ball(0.062, mat, 0, -0.37, 0);
+    arm.add(upper, hand); body.add(arm); arms.push(arm);
+  }
+  const abd = new T.Group(); abd.position.set(0, 0.5, -0.08);
+  abd.add(ball(1, mat, 0, 0.05, -0.24, 0.25, 0.23, 0.31)); body.add(abd);
+  body.add(ball(1, mat, 0, 0.72, 0, 0.19, 0.24, 0.17));
+  const head = new T.Group(); head.position.set(0, 0.93, 0); body.add(head);
+  head.add(ball(1, mat, 0, 0.24, 0.03, 0.27, 0.25, 0.26));
+  const eyes = [];
+  for (const side of [1, -1]){
+    const eye = ball(0.075, eyeMat, 0.1 * side, 0.27, 0.22); head.add(eye); eyes.push(eye);
+    head.add(ball(0.042, pupilMat, 0.1 * side, 0.27, 0.285));
+    const an = new T.Group(); an.position.set(0.08 * side, 0.45, 0.08);
+    const stalk = limb(0.32, mat, 0.36); stalk.position.y = 0.16; an.add(stalk);
+    an.add(ball(0.045, mat, 0, 0.33, 0)); head.add(an); ants.push(an);
+  }
+  const shadow = new T.Mesh(SHADOW_GEO, shadowMat); shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.012; shadow.userData.noPick = true; g.add(shadow);
+  if (isMe){
+    const ring = new T.Mesh(new T.RingGeometry(0.42, 0.48, 40), new T.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0.85, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.016; g.add(ring);
+  }
+  return { g, body, head, abd, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], antL: ants[0], antR: ants[1], eyes, mats: [mat] };
+}
+
+function nameCanvas(name, isMe){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 112;
+  const x = c.getContext('2d'); x.font = '600 42px ' + UI; x.textBaseline = 'middle';
+  const tw = Math.min(x.measureText(name).width, 400), badge = isMe ? 58 : 0, w = tw + 44 + badge, X = (512 - w) / 2;
+  x.fillStyle = 'rgba(12,14,16,0.8)'; rrect(x, X, 18, w, 76, 38); x.fill();
+  if (isMe){
+    x.fillStyle = '#ffb547'; x.beginPath(); x.arc(X + 43, 56, 21, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#16110a'; x.font = '700 26px ' + UI; x.textAlign = 'center'; x.fillText('나', X + 43, 57);
+    x.textAlign = 'left'; x.font = '600 42px ' + UI;
+  }
+  x.fillStyle = '#ece7dc'; x.fillText(name, X + 22 + badge, 58, 400);
+  return c;
+}
+// 평단 chip above the name: "삼전 224,000원", outlined red when the stock is above it, blue when below
+function avgDir(avg){
+  const s = avg && STOCK_BY[avg.s];
+  const p = s ? view(s).p : null;
+  return p == null ? 'flat' : signDir((p / avg.p - 1) * 100);
+}
+// 평단 in 만원 floors: 1,470,000원 → 147층, 224,000원 → 22층
+function floorOf(p){ return Math.floor(p / 1e4); }
+function avgLabel(avg){ return STOCK_BY[avg.s].short + ' ' + won(floorOf(avg.p)) + '층'; }
+function avgCanvas(avg, dir){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+  const x = c.getContext('2d'), short = STOCK_BY[avg.s].short + ' ', price = won(floorOf(avg.p)) + '층';
+  x.font = '700 38px ' + UI; const w1 = x.measureText(short).width;
+  x.font = '600 38px ' + UI; const w2 = Math.min(x.measureText(price).width, 470 - w1);
+  const w = w1 + w2 + 40, X = (512 - w) / 2, tone = dir === 'up' ? COL.up : dir === 'down' ? COL.down : null;
+  x.fillStyle = 'rgba(12,14,16,0.84)'; rrect(x, X, 14, w, 68, 34); x.fill();
+  x.strokeStyle = tone || 'rgba(236,231,220,0.3)'; x.lineWidth = 3; rrect(x, X + 1.5, 15.5, w - 3, 65, 32.5); x.stroke();
+  x.textBaseline = 'middle';
+  x.font = '700 38px ' + UI; x.fillStyle = COL.led; x.fillText(short, X + 20, 50);
+  x.font = '600 38px ' + UI; x.fillStyle = tone || COL.text; x.fillText(price, X + 20 + w1, 50, w2);
+  return c;
+}
+// chat bubble over an ant: up to three lines, bottom-anchored so it always sits right above the name
+const CHAT_W = 640, CHAT_H = 232, CHAT_LINE = 44;
+function wrapLines(x, text, max){
+  const lines = []; let cur = '';
+  for (const ch of text){
+    const next = cur + ch;
+    if (cur && x.measureText(next).width > max){
+      const sp = cur.lastIndexOf(' ');
+      if (sp > 0 && cur.length - sp < 9){ lines.push(cur.slice(0, sp)); cur = cur.slice(sp + 1) + ch; }
+      else { lines.push(cur); cur = ch === ' ' ? '' : ch; }
+    } else cur = next;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function chatCanvas(text, isMe){
+  const c = document.createElement('canvas'); c.width = CHAT_W; c.height = CHAT_H;
+  const x = c.getContext('2d'); x.font = '600 34px ' + UI;
+  let lines = wrapLines(x, text, 560);
+  if (lines.length > 3){ lines = lines.slice(0, 3); lines[2] = lines[2].slice(0, -1) + '…'; }
+  const w = Math.min(CHAT_W - 16, Math.max(...lines.map(l => x.measureText(l).width)) + 44), h = lines.length * CHAT_LINE + 26;
+  const X = (CHAT_W - w) / 2, Y = CHAT_H - 22 - h;
+  x.fillStyle = 'rgba(236,231,220,0.97)'; rrect(x, X, Y, w, h, 24); x.fill();
+  x.beginPath(); x.moveTo(CHAT_W / 2 - 14, Y + h - 1); x.lineTo(CHAT_W / 2, CHAT_H - 6); x.lineTo(CHAT_W / 2 + 14, Y + h - 1); x.fill();
+  if (isMe){ x.strokeStyle = '#ffb547'; x.lineWidth = 4; rrect(x, X + 2, Y + 2, w - 4, h - 4, 22); x.stroke(); }
+  x.fillStyle = '#16140f'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  lines.forEach((l, i) => x.fillText(l, CHAT_W / 2, Y + 13 + CHAT_LINE / 2 + i * CHAT_LINE));
+  return c;
+}
+
+let avatarSeq = 0;
+class Avatar {
+  constructor(o){
+    this.isMe = !!o.isMe; this.name = o.name; this.seed = (avatarSeq++) * 1.7;
+    this.color = ((o.color | 0) % BODY.length + BODY.length) % BODY.length;
+    this.p = makeAnt(BODY[this.color], this.isMe);
+    this.g = this.p.g; scene.add(this.g);
+    this.labelMat = new T.SpriteMaterial({ map: canvasTex(nameCanvas(o.name, this.isMe)), transparent: true, depthTest: false, depthWrite: false });
+    this.label = new T.Sprite(this.labelMat); this.label.scale.set(1.64, 0.36, 1); this.label.renderOrder = 10; this.g.add(this.label);
+    this.chatMat = new T.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false, opacity: 0 });
+    this.chatSprite = new T.Sprite(this.chatMat); this.chatSprite.scale.set(CHAT_W * 0.0032, CHAT_H * 0.0032, 1); this.chatSprite.visible = false; this.chatSprite.renderOrder = 11; this.g.add(this.chatSprite);
+    this.chatText = null; this.chatAt = 0; this.chatUntil = 0;
+    this.avgMat = new T.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    this.avgSprite = new T.Sprite(this.avgMat); this.avgSprite.scale.set(1.5, 0.28, 1); this.avgSprite.visible = false; this.avgSprite.renderOrder = 10; this.g.add(this.avgSprite);
+    this.avg = null; this.avgKey = '';
+    this.setAvg(o.avg || null);
+    this.x = o.x || 0; this.z = o.z || 0; this.r = o.r != null ? o.r : Math.PI; this.tx = this.x; this.tz = this.z; this.tr = this.r;
+    this.sitting = false; this.speed = 0; this.phase = 0;
+  }
+  setName(name, force){
+    if (name === this.name && !force) return;
+    this.name = name;
+    const old = this.labelMat.map; this.labelMat.map = canvasTex(nameCanvas(name, this.isMe)); this.labelMat.needsUpdate = true; old.dispose();
+  }
+  // redraws only when the stock, the number, or the profit/loss side changes (or force after fonts load)
+  setAvg(avg, force){
+    this.avg = cleanAvg(avg);
+    if (!this.avg){ this.avgSprite.visible = false; this.avgKey = ''; return; }
+    const dir = avgDir(this.avg), key = this.avg.s + ':' + this.avg.p + ':' + dir;
+    this.avgSprite.visible = true;
+    if (key === this.avgKey && !force) return;
+    this.avgKey = key;
+    const old = this.avgMat.map; this.avgMat.map = canvasTex(avgCanvas(this.avg, dir)); this.avgMat.needsUpdate = true;
+    if (old) old.dispose();
+  }
+  // a chat line over the head for a few seconds (longer lines stay a little longer)
+  say(text){
+    const old = this.chatMat.map;
+    this.chatMat.map = canvasTex(chatCanvas(text, this.isMe)); this.chatMat.needsUpdate = true;
+    if (old) old.dispose();
+    this.chatText = text; this.lastLine = text; this.chatAt = performance.now();
+    this.chatUntil = this.chatAt + Math.min(8000, 3500 + 120 * [...text].length);
+    this.chatSprite.visible = true;
+  }
+  hush(){ this.chatSprite.visible = false; this.chatText = null; this.chatUntil = 0; }
+  update(dt, t){
+    const P = this.p;
+    this.g.position.set(this.x, 0, this.z);
+    let ry = this.r;
+    P.legL.rotation.set(0, 0, 0); P.legR.rotation.set(0, 0, 0);
+    P.armL.rotation.set(0, 0, 0); P.armR.rotation.set(0, 0, 0);
+    P.head.rotation.set(0, 0, 0); P.abd.rotation.set(0, 0, 0); P.body.rotation.set(0, 0, 0);
+    P.antL.rotation.set(0.25, 0, -0.35); P.antR.rotation.set(0.25, 0, 0.35);
+    let by = 0;
+    const moving = this.speed > 0.25 && !this.sitting;
+    if (moving){
+      this.phase += dt * this.speed * 4.2; const s = Math.sin(this.phase);
+      P.legL.rotation.x = s * 0.65; P.legR.rotation.x = -s * 0.65;
+      P.armL.rotation.x = -s * 0.5; P.armR.rotation.x = s * 0.5;
+      by = Math.abs(Math.cos(this.phase)) * 0.045;
+    } else if (!reduceMotion){
+      by = Math.sin(t * 1.8 + this.seed) * 0.01;
+    }
+    if (!reduceMotion){
+      P.antL.rotation.x += Math.sin(t * 2.3 + this.seed) * 0.12;
+      P.antR.rotation.x += Math.sin(t * 2.3 + this.seed + 0.8) * 0.12;
+    }
+    if (this.sitting){
+      by = SEAT_Y - 0.42 + 0.03;
+      P.legL.rotation.x = P.legR.rotation.x = -1.45;
+      P.armL.rotation.x = P.armR.rotation.x = -0.55;
+    }
+    P.body.position.y = by;
+    this.g.rotation.y = ry;
+    this.label.position.y = 2.0 + by;
+    this.avgSprite.position.y = 2.25 + by;
+    if (this.chatSprite.visible){
+      const now = performance.now();
+      if (now >= this.chatUntil) this.hush();
+      else {
+        this.chatMat.opacity = Math.min(1, (now - this.chatAt) / 160) * Math.min(1, (this.chatUntil - now) / 500);
+        this.chatSprite.position.y = (this.avg ? 2.77 : 2.55) + by;
+      }
+    }
+  }
+  dispose(){
+    scene.remove(this.g);
+    this.labelMat.map.dispose(); this.labelMat.dispose();
+    if (this.chatMat.map) this.chatMat.map.dispose(); this.chatMat.dispose();
+    if (this.avgMat.map) this.avgMat.map.dispose(); this.avgMat.dispose();
+    this.p.mats.forEach(m => m.dispose());
+  }
+}
+
+/* ------------------------------------------------------------------
+   Me
+   ------------------------------------------------------------------ */
+const ADJ = ['존버하는', '물타는', '느긋한', '설레는', '침착한', '단타치는', '졸린', '꼼꼼한', '배고픈', '조용한', '성실한', '떨리는'];
+const NOUN = ['개미', '일개미', '왕개미', '불개미', '동학개미', '서학개미'];
+function saveMe(){ try { localStorage.setItem('gaemi-me', JSON.stringify(me)); } catch (e) {} }
+// the room server accepts exactly these names (worker/src/gaekjang.ts keeps the same two lists)
+const NAMES = new Set(ADJ.flatMap(a => NOUN.map(n => a + ' ' + n)));
+function freshName(){ return ADJ[(Math.random() * ADJ.length) | 0] + ' ' + NOUN[(Math.random() * NOUN.length) | 0]; }
+function loadMe(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('gaemi-me') || 'null'); } catch (e) {}
+  if (saved && typeof saved.name === 'string' && Number.isInteger(saved.color)){
+    const m = { name: NAMES.has(saved.name) ? saved.name : freshName(), color: (saved.color % BODY.length + BODY.length) % BODY.length, avg: cleanAvg(saved.avg) };
+    if (m.name !== saved.name || m.color !== saved.color) try { localStorage.setItem('gaemi-me', JSON.stringify(m)); } catch (e) {}
+    return m;
+  }
+  const fresh = { name: freshName(), color: (Math.random() * BODY.length) | 0, avg: null };
+  try { localStorage.setItem('gaemi-me', JSON.stringify(fresh)); } catch (e) {}
+  return fresh;
+}
+const me = loadMe();
+const player = new Avatar({ name: me.name, color: me.color, avg: me.avg, isMe: true, x: (Math.random() - 0.5) * 1.2, z: 5 + Math.random() * 1.2, r: Math.PI });
+// (spawn in the middle aisle so the camera starts square to the board)
+let target = null;
+
+function clampRoom(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function angleLerp(a, b, k){ const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * k; }
+// facing always stays in [-π, π) so it never piles up past a full turn
+function wrapA(a){ const t = Math.PI * 2; return ((a + Math.PI) % t + t) % t - Math.PI; }
+
+const keys = new Set();
+const SPEED = 3.2;
+let camYaw = 0, camPitch = 0.2, camDist = 7.4;
+function updatePlayer(dt){
+  let f = 0, s = 0;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) s += 1;
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) s -= 1;
+  let vx = 0, vz = 0;
+  if (f || s){
+    target = null; player.sitting = false;
+    const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = -fz, rz = fx;
+    vx = fx * f + rx * s; vz = fz * f + rz * s;
+    const l = Math.hypot(vx, vz); vx = vx / l * SPEED; vz = vz / l * SPEED;
+  } else if (target){
+    const dx = target.x - player.x, dz = target.z - player.z, d = Math.hypot(dx, dz);
+    if (d < 0.04){
+      player.x = target.x; player.z = target.z;
+      if (target.seat >= 0){ player.sitting = true; }
+      target = null;
+    } else {
+      const sp = Math.min(SPEED, d / Math.max(dt, 1e-3)); vx = dx / d * sp; vz = dz / d * sp;
+    }
+  }
+  if (vx || vz){
+    player.x = clampRoom(player.x + vx * dt, ROOM.x0 + 0.6, ROOM.x1 - 0.6);
+    player.z = clampRoom(player.z + vz * dt, ROOM.z0 + 1.4, ROOM.z1 - 0.6);
+    player.r = wrapA(angleLerp(player.r, Math.atan2(vx, vz), 1 - Math.exp(-dt * 14)));
+    player.speed = Math.hypot(vx, vz);
+  } else player.speed = 0;
+  if (player.sitting && !target) player.r = wrapA(angleLerp(player.r, Math.PI, 1 - Math.exp(-dt * 10)));
+}
+
+/* ------------------------------------------------------------------
+   Camera: third person behind the player, or straight at the board
+   ------------------------------------------------------------------ */
+const camPos = new T.Vector3(player.x, 3.4, player.z + 6), camLook = new T.Vector3(player.x, 2.4, player.z);
+const wantPos = new T.Vector3(), wantLook = new T.Vector3();
+// portrait phones get a wider lens so the full board width fits from the benches
+function baseFov(){ return camera.aspect < 0.8 ? 76 : 55; }
+function updateCamera(dt){
+  const wantFov = baseFov();
+  const hy = player.sitting ? 1.25 : 1.5;
+  wantPos.set(
+    player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist,
+    hy + 0.6 + Math.sin(camPitch) * camDist,
+    player.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
+  wantPos.x = clampRoom(wantPos.x, ROOM.x0 + 0.3, ROOM.x1 - 0.3);
+  wantPos.z = clampRoom(wantPos.z, ROOM.z0 + 0.5, ROOM.z1 - 0.3);
+  wantPos.y = clampRoom(wantPos.y, 0.6, ROOM.h - 0.4);
+  wantLook.set(player.x, hy + 1.75, player.z);
+  const k = 1 - Math.exp(-dt * 6);
+  camPos.lerp(wantPos, k); camLook.lerp(wantLook, k);
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  if (Math.abs(camera.fov - wantFov) > 0.05){ camera.fov += (wantFov - camera.fov) * k; camera.updateProjectionMatrix(); }
+}
+
+/* ------------------------------------------------------------------
+   Input
+   ------------------------------------------------------------------ */
+const ray = new T.Raycaster(), ndc = new T.Vector2();
+const hint = $('#hint');
+let hintGone = false;
+function dropHint(){ if (!hintGone){ hintGone = true; hint.classList.add('gone'); } }
+setTimeout(dropHint, 9000);
+
+function tapAt(cx, cy){
+  const rect = canvas.getBoundingClientRect();
+  ndc.set((cx - rect.left) / rect.width * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const pid = peerAt();
+  if (pid){ openPeer(pid); return; }
+  const hits = ray.intersectObjects([seatMesh, floorMesh], false);
+  if (!hits.length) return;
+  const h = hits[0];
+  if (h.object === seatMesh && h.instanceId != null){
+    let best = -1, bd = Infinity;
+    seats.forEach((s, i) => { if (s.bench !== h.instanceId) return; const d = Math.abs(s.x - h.point.x); if (d < bd){ bd = d; best = i; } });
+    if (best >= 0){ const s = seats[best]; target = { x: s.x, z: s.z, seat: best }; player.sitting = false; showMarker(s.x, s.z); }
+  } else {
+    const x = clampRoom(h.point.x, ROOM.x0 + 0.6, ROOM.x1 - 0.6), z = clampRoom(h.point.z, ROOM.z0 + 1.4, ROOM.z1 - 0.6);
+    target = { x, z, seat: -1 }; player.sitting = false; showMarker(x, z);
+  }
+  dropHint();
+}
+function showMarker(x, z){ marker.position.x = x; marker.position.z = z; markerT = 1; }
+
+const pointers = new Map();
+let drag = null, pinchD = 0;
+canvas.addEventListener('pointerdown', e => {
+  canvas.focus({ preventScroll: true });
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
+  else if (pointers.size === 2){ drag = null; const [a, b] = [...pointers.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2){
+    const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinchD > 0 && d > 0) camDist = clampRoom(camDist * pinchD / d, 3, 16);
+    pinchD = d; return;
+  }
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6){ drag.moved = true; canvas.classList.add('dragging'); }
+  if (drag.moved){
+    camYaw -= dx * 0.006;
+    camPitch = clampRoom(camPitch + dy * 0.004, -0.05, 0.95);
+    dropHint();
+  }
+});
+function endPointer(e, cancelled){
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (drag && !drag.moved && !cancelled && pointers.size === 0) tapAt(e.clientX, e.clientY);
+  if (pointers.size === 0){ drag = null; pinchD = 0; canvas.classList.remove('dragging'); }
+}
+canvas.addEventListener('pointerup', e => endPointer(e, false));
+canvas.addEventListener('pointercancel', e => endPointer(e, true));
+canvas.addEventListener('wheel', e => { e.preventDefault(); camDist = clampRoom(camDist * (1 + e.deltaY * 0.0012), 3, 16); }, { passive: false });
+
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || blocked) return;
+  // while the 평단 panel is open (focus in it or not), keys never walk the ant; Esc closes it
+  if (!avgPanel.hidden){ if (e.key === 'Escape'){ e.preventDefault(); closeAvg(true); } return; }
+  if (!peerCard.hidden && e.key === 'Escape'){ e.preventDefault(); closePeer(); return; }
+  if (e.target && e.target.closest && e.target.closest('input, textarea, select')) return;
+  // Enter jumps into the chat box (not while a button or link has focus)
+  if (e.key === 'Enter' && (e.target === document.body || e.target === canvas) && !chatBar.hidden && !chatInput.disabled){
+    e.preventDefault(); chatInput.focus({ preventScroll: true }); return;
+  }
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)){
+    keys.add(e.code); dropHint();
+    if (e.code.startsWith('Arrow')) e.preventDefault();
+  }
+});
+window.addEventListener('keyup', e => keys.delete(e.code));
+window.addEventListener('blur', () => keys.clear());
+
+/* ------------------------------------------------------------------
+   평단 입력: pick 삼성전자 or SK하이닉스, type an average price,
+   and it shows above my ant's name as "삼전 224,000원"
+   ------------------------------------------------------------------ */
+const avgBtn = $('#avgBtn'), avgPanel = $('#avgPanel'), avgForm = $('#avgForm'), avgPrice = $('#avgPrice');
+const avgHint = $('#avgHint'), avgClear = $('#avgClear');
+const AVG_HINT = avgHint.textContent;
+function avgStock(){ const r = avgForm.querySelector('input[name="avgStock"]:checked'); return r ? r.value : 'SMSN'; }
+function avgPlaceholder(){
+  const v = view(STOCK_BY[avgStock()]);
+  avgPrice.placeholder = v.p != null ? '예: ' + won(v.p) : '평단을 입력하세요';
+}
+function setHint(msg, err){ avgHint.textContent = msg; avgHint.classList.toggle('err', !!err); }
+function typedPrice(){ return +avgPrice.value.replace(/[^\d]/g, ''); }
+// show what the chip will say while typing
+function previewHint(){
+  const n = typedPrice();
+  if (n >= 1e4 && n <= AVG_MAX) setHint('이름 위에 "' + avgLabel({ s: avgStock(), p: n }) + '"으로 표시돼요.', false);
+  else setHint(AVG_HINT, false);
+}
+function openAvg(){
+  const cur = me.avg;
+  avgForm.querySelector('input[value="' + (cur ? cur.s : 'SMSN') + '"]').checked = true;
+  avgPrice.value = cur ? won(cur.p) : '';
+  avgClear.hidden = !cur;
+  previewHint(); avgPlaceholder();
+  avgPanel.hidden = false; avgBtn.setAttribute('aria-expanded', 'true');
+  dropHint();
+  setTimeout(() => { try { avgPrice.focus({ preventScroll: true }); } catch (e) {} }, 0);
+}
+function closeAvg(refocus){
+  if (avgPanel.hidden) return;
+  avgPanel.hidden = true; avgBtn.setAttribute('aria-expanded', 'false');
+  if (refocus) avgBtn.focus({ preventScroll: true });
+}
+function applyMyAvg(avg){
+  me.avg = cleanAvg(avg); saveMe();
+  player.setAvg(me.avg);
+  sendState(true);
+}
+avgBtn.addEventListener('click', () => (avgPanel.hidden ? openAvg() : closeAvg(false)));
+// after picking the stock, go straight to the price
+avgForm.addEventListener('change', e => { if (e.target.name === 'avgStock'){ avgPlaceholder(); previewHint(); avgPrice.focus({ preventScroll: true }); } });
+// keep only digits and show thousands separators while typing
+avgPrice.addEventListener('input', () => {
+  const digits = avgPrice.value.replace(/[^\d]/g, '').replace(/^0+/, '').slice(0, 10);
+  avgPrice.value = digits ? won(+digits) : '';
+  previewHint();
+});
+avgForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const n = typedPrice();
+  if (!n){ setHint('평단을 숫자로 입력해 주세요.', true); avgPrice.focus(); return; }
+  if (n < 1e4){ setHint('층은 만 원 단위라서 10,000원 이상으로 입력해 주세요.', true); avgPrice.focus(); return; }
+  if (n > AVG_MAX){ setHint('10억 원 이하로 입력해 주세요.', true); avgPrice.focus(); return; }
+  applyMyAvg({ s: avgStock(), p: n });
+  closeAvg(true);
+});
+avgClear.addEventListener('click', () => { applyMyAvg(null); closeAvg(true); });
+avgPanel.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeAvg(true); } });
+document.addEventListener('pointerdown', e => {
+  if (!avgPanel.hidden && !avgPanel.contains(e.target) && !avgBtn.contains(e.target)) closeAvg(false);
+});
+
+/* ------------------------------------------------------------------
+   Shared room: everyone on this page sees each other's ants.
+   Server: api.korulive.com/gaekjang/ws (Cloudflare Durable Object,
+   worker/src/gaekjang.ts). There is one room for 100 people. When it is
+   full nobody else gets in: the page shows "객장이 꽉 찼어요" instead of
+   the room and walks in by itself once a spot opens up.
+   Chat: what you type pops up over your ant for a few seconds (40 chars,
+   every 3 s, starting a minute after you walk in). Tap someone's ant to
+   report them: their words never show on your screen again, and once
+   several people report the same ant it can't talk at all.
+   ------------------------------------------------------------------ */
+const WS_BASE = (() => {
+  // only a local copy of the page may point somewhere else: ?ws=ws://127.0.0.1:8787 (wrangler dev)
+  const local = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const q = local ? new URLSearchParams(location.search).get('ws') : null;
+  return q && /^wss?:\/\/[\w.:\-\[\]]+$/.test(q) ? q : 'wss://api.korulive.com';
+})();
+const FULL_RETRY_MS = 20000;   // while the room is full, check for a free spot about this often
+const SEND_MS = 150;           // my state goes out at most ~7×/s, and only the fields that changed
+const PING_MS = 25000;         // keepalive; the server answers it without waking the room
+const DEAD_MS = 70000;         // nothing heard for this long → reconnect
+const HIDDEN_MS = 120000;      // a tab left in the background gives its spot back after 2 min
+const SOLO_AFTER_MS = 10000;   // not in a room after this long → "혼자 보는 중" (it keeps trying)
+const AVG_GAP_MS = 1500;       // the server penalises 평단 changes closer than 1s, so a quick re-edit waits its turn
+const CHAT_MAX = 40, CHAT_GAP_MS = 3000;   // same limits as the server
+function hex32(){ const b = new Uint8Array(16); crypto.getRandomValues(b); return Array.from(b, v => v.toString(16).padStart(2, '0')).join(''); }
+// a random key per page load: when this page reconnects, the server retires its old connection first,
+// so a link that died silently never leaves a second copy of me (or holds my seat in a full room)
+const PAGE_KEY = hex32();
+// a random key per browser (kept): the server hashes it for the 1-minute wait and chat spacing,
+// and hands others a speaker key made from it, so a block I make keeps working when that person comes back
+const DEVICE_KEY = (() => {
+  try {
+    let v = localStorage.getItem('gaemi-dev');
+    if (!/^[0-9a-f]{32}$/.test(v || '')){ v = hex32(); localStorage.setItem('gaemi-dev', v); }
+    return v;
+  } catch (e) { return hex32(); }
+})();
+// people I blocked: their words never show on my screen (kept in this browser, by their speaker key).
+// Only this page knows; nothing about it goes to the server.
+const BLOCK_KEY = 'gaemi-block';
+const blockedSk = new Set((() => {
+  try { const a = JSON.parse(localStorage.getItem(BLOCK_KEY) || '[]'); return Array.isArray(a) ? a.filter(v => typeof v === 'string' && /^[0-9a-f]{12}$/.test(v)).slice(-300) : []; }
+  catch (e) { return []; }
+})());
+function saveBlocks(){ try { localStorage.setItem(BLOCK_KEY, JSON.stringify([...blockedSk].slice(-300))); } catch (e) {} }
+function isHidden(av){ return !!(av && av.sk && blockedSk.has(av.sk)); }
+const others = new Map();      // peer id → Avatar (a Map, so ids never touch object prototypes)
+let ws = null, myId = null, roomNo = 1, retryN = 0, paused = false, sent = null, blocked = false;
+let retryT = 0, soloT = 0, clearT = 0, hiddenT = 0, lastHeard = 0, lastSent = 0, lastAvgSent = 0;
+let chatMode = 'on', chatAtLocal = Infinity, canChat = false, lastChatSent = 0, lastChatText = '', chatTimer = 0;
+
+const r2 = v => Math.round(v * 100) / 100;
+function isOpen(){ return !!(ws && ws.readyState === 1 && myId); }
+function myState(){
+  return { n: me.name, c: me.color, x: r2(player.x), z: r2(player.z), r: r2(wrapA(player.r)),
+    s: player.sitting ? 1 : 0, a: me.avg ? [me.avg.s, me.avg.p] : null };
+}
+// only what changed since the last send (everything right after joining)
+function sendState(force){
+  if (!isOpen() || ws.bufferedAmount > 65536) return;
+  const now = performance.now();
+  if (!force && now - lastSent < SEND_MS) return;
+  const st = myState(), out = { t: 's' };
+  let any = false;
+  for (const k of Object.keys(st)){
+    if (sent && JSON.stringify(st[k]) === JSON.stringify(sent[k])) continue;
+    if (k === 'a' && sent && now - lastAvgSent < AVG_GAP_MS){ st.a = sent.a; continue; }   // goes out on a later frame
+    out[k] = st[k]; any = true;
+  }
+  if (!any) return;
+  if (hasOwn(out, 'a')) lastAvgSent = now;
+  ws.send(JSON.stringify(out)); sent = st; lastSent = now;
+}
+
+/* ---- chat ---- */
+const chatBar = $('#chatBar'), chatInput = $('#chatInput'), chatSend = $('#chatSend'), toastEl = $('#toast');
+function cleanChatText(v){
+  if (typeof v !== 'string') return '';
+  const t = v.replace(/[\t\n\r\f\v]+/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufeff\uffa0]/g, '')
+    .replace(/[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefe\u{10800}-\u{10fff}\u{1e800}-\u{1efff}]/gu, '')
+    .replace(/\s+/g, ' ').trim();
+  return [...t].slice(0, CHAT_MAX).join('');
+}
+let toastT = 0;
+function toast(msg){
+  toastEl.textContent = msg; toastEl.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { toastEl.hidden = true; }, 2800);
+}
+function chatState(){
+  if (blocked) return 'gate';
+  if (chatMode === 'off') return 'off';
+  if (!isOpen()) return 'offline';
+  if (!canChat) return 'off';
+  if (Date.now() < chatAtLocal) return 'wait';
+  return 'ok';
+}
+const CHAT_PH = { offline: '연결되면 쓸 수 있어요', ok: '한마디 하기 (40자)' };
+function renderChat(){
+  clearTimeout(chatTimer);
+  const st = chatState();
+  chatBar.hidden = st === 'off' || st === 'gate';
+  if (chatBar.hidden) return;
+  if (st === 'wait'){
+    const left = chatAtLocal - Date.now();
+    chatInput.placeholder = Math.ceil(left / 1000) + '초 뒤부터 쓸 수 있어요';
+    chatTimer = setTimeout(renderChat, (left % 1000 || 1000) + 5);   // tick right when the number changes
+  } else chatInput.placeholder = CHAT_PH[st] || '';
+  chatInput.disabled = st !== 'ok';
+  chatSend.disabled = st !== 'ok' || !chatInput.value.trim();
+}
+function sendChat(){
+  if (chatState() !== 'ok') return;
+  const text = cleanChatText(chatInput.value);
+  if (!text) return;
+  if (Date.now() - lastChatSent < CHAT_GAP_MS){ toast('조금 천천히 보내 주세요'); return; }
+  ws.send(JSON.stringify({ t: 'c', m: text }));
+  lastChatSent = Date.now(); lastChatText = text;
+  chatInput.value = ''; chatSend.disabled = true;
+}
+const CX_TEXT = {
+  wait: '들어오고 1분 뒤부터 쓸 수 있어요', slow: '조금 천천히 보내 주세요', same: '같은 말은 잠시 뒤에 다시 보낼 수 있어요',
+  long: '40자까지 쓸 수 있어요', blocked: '링크·연락처·홍보·욕설은 보낼 수 없어요', off: '지금은 채팅이 꺼져 있어요',
+  nodev: '이 브라우저에서는 채팅을 쓸 수 없어요',
+};
+// the room turned a line down: say why, and give the words back so they can be fixed
+function onChatRefused(m){
+  const why = typeof m.why === 'string' && hasOwn(CX_TEXT, m.why) ? m.why : null;
+  if (!why) return;
+  if (why === 'off') chatMode = 'off';
+  else if (why === 'nodev') canChat = false;
+  else if (why === 'wait' && Number.isFinite(m.left)) chatAtLocal = Date.now() + Math.max(0, m.left);
+  if (why === 'slow' && Number.isFinite(m.left)) lastChatSent = Date.now() + m.left - CHAT_GAP_MS;
+  else if (['same', 'long', 'blocked'].includes(why)) lastChatSent = 0;
+  if (['wait', 'slow', 'same', 'long', 'blocked'].includes(why) && !chatInput.value && lastChatText) chatInput.value = lastChatText;
+  toast(CX_TEXT[why]);
+  renderChat();
+}
+chatBar.addEventListener('submit', e => { e.preventDefault(); sendChat(); });
+chatInput.addEventListener('input', e => {
+  // 40 characters (an emoji counts as one); never cut in the middle of composing a Korean syllable
+  if (!e.isComposing){ const cs = [...chatInput.value]; if (cs.length > CHAT_MAX) chatInput.value = cs.slice(0, CHAT_MAX).join(''); }
+  chatSend.disabled = chatState() !== 'ok' || !chatInput.value.trim();
+});
+chatInput.addEventListener('compositionend', () => { const cs = [...chatInput.value]; if (cs.length > CHAT_MAX) chatInput.value = cs.slice(0, CHAT_MAX).join(''); });
+chatInput.addEventListener('focus', () => { keys.clear(); target = null; dropHint(); closePeer(); });
+chatInput.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); chatInput.blur(); canvas.focus({ preventScroll: true }); } });
+// phones: keep the bar (and its messages) above the on-screen keyboard
+function placeChatBar(){
+  const vv = window.visualViewport;
+  const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  chatBar.style.bottom = kb > 60 ? (kb + 8) + 'px' : '';
+  toastEl.style.bottom = kb > 60 ? (kb + 62) + 'px' : '';
+}
+if (window.visualViewport){ visualViewport.addEventListener('resize', placeChatBar); visualViewport.addEventListener('scroll', placeChatBar); }
+chatInput.addEventListener('blur', () => setTimeout(() => { placeChatBar(); if (window.scrollY) window.scrollTo(0, 0); }, 60));
+
+/* ---- someone's card: tap their ant to block (or unblock) them on my screen ---- */
+const peerCard = $('#peerCard'), peerName = $('#peerName'), peerNote = $('#peerNote'), peerBlock = $('#peerBlock'), peerClose = $('#peerClose');
+let peerId = null;
+function peerAt(){
+  if (!others.size || chatMode === 'off') return null;
+  const groups = []; others.forEach(av => groups.push(av.g));
+  const found = [];   // [peer id, distance, hit its chat bubble]
+  for (const h of ray.intersectObjects(groups, true)){
+    let id = null, shown = true;
+    for (let o = h.object; o; o = o.parent){
+      if (!o.visible || (o.userData && o.userData.noPick)) shown = false;
+      if (o.userData && typeof o.userData.peerId === 'string'){ id = o.userData.peerId; break; }
+    }
+    if (!id || !shown) continue;
+    const av = others.get(id);
+    if (av) found.push([id, h.distance, h.object === av.chatSprite]);
+  }
+  if (!found.length) return null;
+  const bubble = found.find(f => f[2]);
+  if (bubble) return bubble[0];
+  // ants on the same spot: prefer the one that is talking right now
+  const near = found.filter(f => f[1] < found[0][1] + 0.8);
+  const talking = near.find(f => { const av = others.get(f[0]); return av && av.chatSprite.visible; });
+  return (talking || found[0])[0];
+}
+function openPeer(id){
+  const av = others.get(id);
+  if (!av) return;
+  closeAvg(false);
+  peerId = id;
+  peerName.textContent = av.name;
+  const done = isHidden(av);
+  const said = !done && av.lastLine ? '마지막으로 한 말: "' + av.lastLine + '"\n' : '';
+  peerNote.textContent = !av.sk ? '' : done ? '차단한 개미예요. 이 개미가 하는 말은 내 화면에 안 보여요.'
+    : said + '차단하면 이 개미가 하는 말이 내 화면에서 계속 안 보여요. 상대는 알 수 없어요.';
+  peerBlock.textContent = done ? '차단 풀기' : '차단하기';
+  peerBlock.className = done ? 'ghost' : 'danger';
+  peerBlock.hidden = !av.sk;   // no speaker key → this ant can't chat, nothing to block
+  peerCard.hidden = false;
+  dropHint();
+}
+function closePeer(){ if (!peerCard.hidden){ peerCard.hidden = true; peerId = null; } }
+peerClose.addEventListener('click', closePeer);
+peerBlock.addEventListener('click', () => {
+  const av = peerId ? others.get(peerId) : null;
+  if (av && av.sk){
+    if (blockedSk.has(av.sk)){
+      blockedSk.delete(av.sk); saveBlocks();
+      toast('차단을 풀었어요. 이제 이 개미가 하는 말이 보여요.');
+    } else {
+      blockedSk.add(av.sk); saveBlocks(); av.hush();
+      toast('차단했어요. 이 개미가 하는 말은 이제 안 보여요.');
+    }
+  }
+  closePeer();
+});
+document.addEventListener('pointerdown', e => { if (!peerCard.hidden && !peerCard.contains(e.target)) closePeer(); }, true);
+
+function cleanName(v){
+  const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 16) : '';
+  return s || '이름 없는 개미';
+}
+function num(v, a, b, d){ return typeof v === 'number' && isFinite(v) ? Math.max(a, Math.min(b, v)) : d; }
+function int(v, n){ return Number.isInteger(v) ? ((v % n) + n) % n : 0; }
+function avgOf(a){ return Array.isArray(a) ? cleanAvg({ s: a[0], p: a[1] }) : null; }
+// a full state makes a new ant; after that only the fields that came in are applied
+function upsertPeer(p){
+  if (!p || typeof p !== 'object' || typeof p.id !== 'string' || p.id === myId) return null;
+  let av = others.get(p.id);
+  if (av && hasOwn(p, 'c') && int(p.c, BODY.length) !== av.color){
+    const old = av;   // the body color is baked into the model, so rebuild it in place
+    av = new Avatar({ name: old.name, color: int(p.c, BODY.length), avg: old.avg, x: old.x, z: old.z, r: old.r });
+    av.tx = old.tx; av.tz = old.tz; av.tr = old.tr; av.sitting = old.sitting; av.sk = old.sk; av.g.userData.peerId = p.id;
+    old.dispose(); others.set(p.id, av);
+  }
+  if (!av){
+    if (typeof p.n !== 'string' || !Number.isInteger(p.c) || typeof p.x !== 'number' || typeof p.z !== 'number') return null;
+    av = new Avatar({ name: cleanName(p.n), color: int(p.c, BODY.length), avg: avgOf(p.a),
+      x: num(p.x, ROOM.x0, ROOM.x1, 0), z: num(p.z, ROOM.z0, ROOM.z1, 6), r: wrapA(num(p.r, -10, 10, Math.PI)) });
+    av.sitting = p.s === 1;
+    av.g.userData.peerId = p.id;
+    if (typeof p.sk === 'string' && /^[0-9a-f]{12}$/.test(p.sk)) av.sk = p.sk;
+    others.set(p.id, av);
+    return av;
+  }
+  if (hasOwn(p, 'n')) av.setName(cleanName(p.n));
+  if (hasOwn(p, 'a')) av.setAvg(avgOf(p.a));
+  if (hasOwn(p, 'x')) av.tx = num(p.x, ROOM.x0, ROOM.x1, av.tx);
+  if (hasOwn(p, 'z')) av.tz = num(p.z, ROOM.z0, ROOM.z1, av.tz);
+  if (hasOwn(p, 'r')) av.tr = wrapA(num(p.r, -10, 10, av.tr));
+  if (hasOwn(p, 's')) av.sitting = p.s === 1;
+  return av;
+}
+function removePeer(id){ const av = others.get(id); if (av){ av.dispose(); others.delete(id); } if (peerId === id) closePeer(); }
+function clearPeers(){ for (const id of [...others.keys()]) removePeer(id); }
+
+const countEl = $('#count'), dotEl = $('#dot');
+// very narrow phones (under 360px) get the short form so 평단 입력 stays on the same row
+const narrowHud = window.matchMedia ? matchMedia('(max-width:359px)') : null;
+function renderCount(){
+  const live = roomState === 'live', short = !!(narrowHud && narrowHud.matches);
+  countEl.textContent = live ? roomCount + (short ? '명' : '명 함께 보는 중') : roomState === 'solo' ? '혼자 보는 중'
+    : roomState === 'full' ? (short ? '가득 찼어요' : '객장이 가득 찼어요') : '연결 중';
+  dotEl.classList.toggle('live', live);
+  // (no board repaint here: the footer picks the count up on the clock's once-a-second repaint)
+}
+if (narrowHud && narrowHud.addEventListener) narrowHud.addEventListener('change', renderCount);
+// the HUD and the board footer are redrawn only when the state or the head count actually changes
+function setRoom(state, count){
+  const n = Number.isInteger(count) && count > 0 ? count : roomCount;
+  if (state === roomState && n === roomCount) return;
+  roomState = state; roomCount = n;
+  renderCount();
+}
+
+function onHello(m){
+  myId = typeof m.id === 'string' ? m.id : null;
+  if (Number.isInteger(m.room)) roomNo = m.room;
+  retryN = 0; sent = null;
+  unblock();
+  clearTimeout(clearT); clearTimeout(soloT);
+  const here = new Set();
+  if (Array.isArray(m.peers)) for (const p of m.peers){
+    const av = upsertPeer(p);
+    if (!av) continue;
+    here.add(p.id);
+  }
+  for (const id of [...others.keys()]) if (!here.has(id)) removePeer(id);
+  setRoom('live', Math.max(1, m.count | 0));
+  // chat: on / off, and when I may start (chatAt is server time)
+  chatMode = m.chat === 'off' ? 'off' : 'on';
+  const skew = Number.isFinite(m.now) ? Date.now() - m.now : 0;
+  chatAtLocal = Number.isFinite(m.chatAt) ? m.chatAt + skew : Date.now() + 60000;
+  canChat = m.canChat === true;
+  renderChat();
+  sendState(true);   // my whole state, also after every reconnect
+}
+function onTick(m){
+  if (Array.isArray(m.up)) for (const p of m.up) upsertPeer(p);
+  if (Array.isArray(m.chat)) for (const c of m.chat){
+    if (!c || typeof c.id !== 'string') continue;
+    const text = cleanChatText(c.m);
+    if (!text) continue;
+    if (c.id === myId){ player.say(text); continue; }
+    const av = others.get(c.id);
+    if (av && !isHidden(av)) av.say(text);
+  }
+  if (Array.isArray(m.left)) for (const id of m.left) if (typeof id === 'string') removePeer(id);
+  if (Number.isInteger(m.count)) setRoom('live', Math.max(1, m.count));
+}
+function onMessage(data){
+  lastHeard = Date.now();
+  if (typeof data !== 'string' || data === 'pong') return;
+  let m; try { m = JSON.parse(data); } catch (e) { return; }
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'tick') onTick(m);
+  else if (m.t === 'hello') onHello(m);
+  else if (m.t === 'full') roomFull(m);
+  else if (m.t === 'cx') onChatRefused(m);
+}
+
+function connect(){
+  clearTimeout(retryT); retryT = 0;
+  if (ws || paused) return;
+  let sock;
+  try { sock = new WebSocket(WS_BASE + '/gaekjang/ws?room=' + roomNo + '&k=' + PAGE_KEY + '&d=' + DEVICE_KEY); } catch (e) { scheduleRetry(); return; }
+  ws = sock; lastHeard = Date.now();
+  sock.onmessage = ev => { if (ws === sock) onMessage(ev.data); };
+  sock.onclose = ev => { if (ws === sock) onClosed(ev.code); };
+  if (roomState !== 'live') armSolo();
+}
+// let go of the socket now, without waiting for its close event
+function drop(code){
+  const s = ws; ws = null; myId = null; sent = null;
+  if (s){ s.onmessage = s.onclose = null; try { s.close(code || 1000); } catch (e) {} }
+  renderChat();
+}
+// the room is full (100) → no way in: cover the room with the notice and quietly check again now and then
+const gateEl = $('#gate'), gateTitle = $('#gateTitle'), gateText = $('#gateText');
+function roomFull(m){
+  drop(1000);
+  const cap = m && Number.isInteger(m.cap) && m.cap > 0 ? m.cap : 100;
+  if (m && m.why === 'ip'){
+    gateTitle.textContent = '지금은 들어갈 수 없어요';
+    gateText.textContent = '같은 와이파이나 회사망에서 이미 많이 들어와 있어요.\n자리가 나면 자동으로 들어가요.';
+  } else {
+    gateTitle.textContent = '객장이 꽉 찼어요';
+    gateText.textContent = '최대 ' + cap + '명까지 함께 볼 수 있어요.\n자리가 나면 자동으로 들어가요.';
+  }
+  if (!blocked){
+    blocked = true; gateEl.hidden = false;
+    keys.clear(); target = null; closeAvg(false);
+    clearPeers(); setRoom('full'); closePeer(); chatInput.blur();
+  }
+  renderChat();
+  scheduleRetry(FULL_RETRY_MS * (0.75 + Math.random() * 0.5));
+}
+function unblock(){
+  if (!blocked) return;
+  blocked = false; gateEl.hidden = true; markDirty();
+  renderChat();
+}
+function onClosed(code){
+  ws = null; myId = null; sent = null;
+  renderChat();
+  if (code === 4001){ roomFull(null); return; }
+  lostRoom();
+  scheduleRetry();
+}
+// keep the others standing for a short blip; clear them if the room doesn't come back
+function lostRoom(){
+  if (roomState === 'live') setRoom('connecting');
+  armSolo();
+  clearTimeout(clearT);
+  clearT = setTimeout(() => { if (!isOpen()) clearPeers(); }, 15000);
+}
+function armSolo(){
+  clearTimeout(soloT);
+  soloT = setTimeout(() => { if (!isOpen() && roomState === 'connecting') setRoom('solo'); }, SOLO_AFTER_MS);
+}
+// 1s, 2s, 4s … up to 30s, with jitter so a server restart isn't hit by everyone at once
+function scheduleRetry(ms){
+  clearTimeout(retryT);
+  if (paused) return;
+  if (ms == null){ ms = Math.min(30000, 1000 * 2 ** Math.min(retryN, 5)) * (0.6 + Math.random() * 0.4); retryN++; }
+  retryT = setTimeout(connect, ms);
+}
+
+setInterval(() => {
+  if (!ws) return;
+  if (Date.now() - lastHeard > DEAD_MS){ drop(4000); lostRoom(); scheduleRetry(); return; }
+  if (ws.readyState === 1){ try { ws.send('ping'); } catch (e) {} }
+}, PING_MS);
+// a background tab gives its spot back after a while and comes back in when it is shown again
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(hiddenT);
+  if (document.hidden){
+    hiddenT = setTimeout(() => {
+      if (!document.hidden) return;
+      paused = true; clearTimeout(retryT); drop(1000); clearPeers(); setRoom('connecting');
+    }, HIDDEN_MS);
+  } else if (paused){ paused = false; retryN = 0; connect(); }
+  else if (ws && ws.readyState === 1 && Date.now() - lastHeard > 30000){
+    // back from a phone's background: a socket can look open but be dead, so check it now instead of in 70s
+    const before = lastHeard;
+    try { ws.send('ping'); } catch (e) {}
+    setTimeout(() => { if (ws && lastHeard === before){ drop(4000); lostRoom(); scheduleRetry(0); } }, 5000);
+  }
+});
+window.addEventListener('pagehide', () => { paused = true; clearTimeout(retryT); drop(1000); });
+window.addEventListener('pageshow', e => { if (e.persisted){ paused = false; retryN = 0; clearPeers(); setRoom('connecting'); connect(); } });
+renderCount();
+renderChat();
+connect();
+
+function updateOthers(dt, t){
+  const k = 1 - Math.exp(-dt * 9);
+  others.forEach(av => {
+    const ox = av.x, oz = av.z;
+    av.x += (av.tx - av.x) * k; av.z += (av.tz - av.z) * k;
+    if (Math.hypot(av.tx - av.x, av.tz - av.z) < 0.01){ av.x = av.tx; av.z = av.tz; }
+    av.r = wrapA(angleLerp(av.r, av.tr, 1 - Math.exp(-dt * 10)));
+    const sp = Math.hypot(av.x - ox, av.z - oz) / Math.max(dt, 1e-3);
+    av.speed += (sp - av.speed) * Math.min(1, dt * 8);
+    av.update(dt, t);
+  });
+}
+
+/* ------------------------------------------------------------------
+   HUD + loop
+   ------------------------------------------------------------------ */
+const sr = $('#sr');
+const glowTarget = new T.Color('#ffb547');
+const lightBase = new T.Color('#ffd9a0');
+let lastBoard = 0, lastSec = -1, lastSr = 0;
+function refreshHud(){
+  const vs = STOCKS.map(s => view(s));
+  // 평단 chips turn red/blue as prices cross them
+  player.setAvg(player.avg); others.forEach(av => av.setAvg(av.avg));
+  if (!avgPanel.hidden && !avgPrice.value) avgPlaceholder();
+  if (vs.some(v => v.p != null) && Date.now() - lastSr > 30000){
+    lastSr = Date.now();
+    sr.textContent = STOCKS.map((s, i) => vs[i].p == null ? '' : s.name + ' ' + won(vs[i].p) + '원' + (vs[i].pct != null ? ', 정규장 마감 대비 ' + fmtPct(vs[i].pct) : '') + '.').join(' ');
+  }
+  // the room glows red when both are up, blue when both are down
+  glowTarget.set(vs.every(v => v.dir === 'up') ? '#ff4d57' : vs.every(v => v.dir === 'down') ? '#3f8cff' : '#ffb547');
+}
+
+function resize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.fov = baseFov(); camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+let lastT = performance.now();
+function frame(now){
+  // the room is full: the gate covers everything, so skip all drawing until we get in
+  if (blocked){ lastT = now; requestAnimationFrame(frame); return; }
+  // a slow first load can hand the first frame a timestamp from before the script finished: never step backwards
+  const dt = Math.min(0.05, Math.max(0, (now - lastT) / 1000)); lastT = now;
+  const t = now / 1000, sec = Math.floor(Date.now() / 1000);
+  if (M.dirty && now - lastBoard > 120 || sec !== lastSec){
+    M.dirty = false; lastBoard = now;
+    drawBoard(); boardTex.needsUpdate = true;
+    refreshHud();
+  }
+  if (sec !== lastSec){
+    lastSec = sec;
+    drawTicker(); tickerTex.needsUpdate = true;
+    tickerTex.repeat.x = (TICKER.w / TICKER.h) / (tc.width / tc.height);
+  }
+  tickerTex.offset.x = (tickerTex.offset.x + dt * (reduceMotion ? 0.012 : 0.04)) % 1;
+  glowMat.color.lerp(glowTarget, 1 - Math.exp(-dt * 2));
+  boardLight.color.copy(lightBase).lerp(glowTarget, 0.35);
+
+  updatePlayer(dt);
+  player.update(dt, t);
+  updateOthers(dt, t);
+  updateCamera(dt);
+  if (markerT > 0){ markerT = Math.max(0, markerT - dt * 1.4); marker.material.opacity = markerT * 0.9; marker.scale.setScalar(1 + (1 - markerT) * 0.4); }
+  sendState(false);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// once the web fonts arrive, redraw everything that was painted with fallbacks
+if (document.fonts && document.fonts.load){
+  Promise.all([
+    document.fonts.load('44px "DotGothic16"'),
+    document.fonts.load('600 42px "IBM Plex Sans KR"', '개미'),
+    document.fonts.load('700 54px "IBM Plex Sans KR"', '삼성전자 SK하이닉스'),
+  ]).then(() => {
+    markDirty(); lastSec = -1;
+    buildSigns();
+    player.setName(player.name, true); player.setAvg(player.avg, true);
+    others.forEach(av => { av.setName(av.name, true); av.setAvg(av.avg, true); });
+  }).catch(() => {});
+}
+})();
+</script>
+</body>
+</html>
