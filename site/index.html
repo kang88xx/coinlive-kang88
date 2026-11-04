@@ -134,6 +134,10 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
 .brand .mark::before{content:var(--brand-glyph);font-size:13px;color:var(--led);line-height:1}
 .chatbar{box-shadow:0 12px 32px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.07)}
 .hint{border:1px solid var(--line)}
+.acts{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));display:none;flex-direction:column;gap:8px;z-index:2}
+.acts button{appearance:none;width:56px;height:56px;border:1px solid var(--line);border-radius:50%;background:var(--glass);color:var(--text);font:600 13px var(--font-ui);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.acts button:active,.acts button.on{background:var(--led);color:#301315;border-color:var(--led)}
+@media (pointer:coarse){ .acts{display:flex} }
 .avg-panel,.peer-card{box-shadow:0 18px 48px rgba(0,0,0,.55)}
 </style>
 <link rel="stylesheet" href="ui-a.css">
@@ -177,7 +181,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
     </form>
   </div>
 
-  <p class="hint" id="hint">바닥을 눌러 이동 · 의자를 눌러 앉기 · 드래그로 둘러보기</p>
+  <p class="hint" id="hint">바닥 클릭 이동 · 의자 클릭 앉기 · Ctrl 쪼그리기 · Space 점프 · Alt 발사 · 드래그로 둘러보기</p>
 
   <form class="chatbar" id="chatBar" autocomplete="off">
     <input id="chatInput" maxlength="80" enterkeyhint="send" placeholder="연결되면 쓸 수 있어요" aria-label="채팅 (Enter)" disabled>
@@ -186,6 +190,12 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
     </button>
   </form>
   <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
+  <!-- touch screens have no Ctrl/Space/Alt: the same three actions as buttons -->
+  <div class="acts" id="acts" aria-label="동작">
+    <button type="button" data-act="crouch" aria-label="쪼그리기">앉기</button>
+    <button type="button" data-act="jump" aria-label="점프">점프</button>
+    <button type="button" data-act="shoot" aria-label="발사">발사</button>
+  </div>
 
   <div class="peer-card" id="peerCard" role="dialog" aria-labelledby="peerName" hidden>
     <p class="peer-name" id="peerName"></p>
@@ -813,6 +823,34 @@ const whiteMat = new T.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.5 }
 const redMat = new T.MeshStandardMaterial({ color: '#d8232a', roughness: 0.45 });
 const phoneMat = new T.MeshStandardMaterial({ color: '#ff7b2a', roughness: 0.35 });
 const shadowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: '#000000', transparent: true, opacity: 0.26, depthWrite: false });
+const gunMat = new T.MeshStandardMaterial({ color: '#1c1d20', roughness: 0.35, metalness: 0.7 });
+const JUMP_T = 0.6, JUMP_H = 0.62, SHOT_T = 0.75;
+// muzzle flash: a soft starburst; 탕!: a yellow comic-book pop
+const flashTex = (function(){ const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 2, 64, 64, 60); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(255,210,90,0.9)'); g.addColorStop(1, 'rgba(255,120,30,0)');
+  x.fillStyle = g; x.beginPath();
+  for (let i = 0; i < 16; i++){ const a = i / 16 * Math.PI * 2, r = i % 2 ? 26 : 62; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); }
+  x.closePath(); x.fill(); return canvasTex(c); })();
+const popTex = (function(){ const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
+  x.font = '900 86px ' + UI; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';
+  x.lineWidth = 18; x.strokeStyle = '#2a0b0d'; x.strokeText('탕!', 128, 66);
+  x.lineWidth = 8; x.strokeStyle = '#ffffff'; x.strokeText('탕!', 128, 66);
+  x.fillStyle = '#ffcf4a'; x.fillText('탕!', 128, 66); return canvasTex(c); })();
+let camShake = 0;
+// a short filtered noise burst for the shot (WebAudio, created on the first key press)
+let actx = null;
+function bang(){
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const n = Math.floor(actx.sampleRate * 0.2), buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+    const src = actx.createBufferSource(); src.buffer = buf;
+    const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1600;
+    const g = actx.createGain(); g.gain.value = 0.22;
+    src.connect(f); f.connect(g); g.connect(actx.destination); src.start();
+  } catch (e) {}
+}
 const SHADOW_GEO = new T.PlaneGeometry(1.3, 1.3);
 const HIP = 0.74, THIGH = 0.37, SHIN = 0.36;
 
@@ -971,7 +1009,7 @@ function makeFigure(kind, hex, isMe){
   const top = new T.MeshStandardMaterial({ color: hex, roughness: 0.95, metalness: 0 });
   const faceMat = new T.MeshStandardMaterial({ map: faceTexture(kind), roughness: 0.6 });
   const g = new T.Group(), body = new T.Group(); g.add(body);
-  const legs = [], knees = [], arms = [];
+  const legs = [], knees = [], arms = [], elbows = [];
   // legs: thigh at the hip, shin under a knee joint; suit trousers + black shoes, or denim shorts + socks + sneakers
   for (const side of [1, -1]){
     const leg = new T.Group(); leg.position.set((kim ? 0.17 : 0.17) * side, hip, 0);
@@ -1028,7 +1066,7 @@ function makeFigure(kind, hex, isMe){
     const arm = new T.Group();
     arm.add(limb(0.32, top, kim ? 2.2 : 2.4));
     if (!kim) arm.add(cyl(0.1, 0.095, 0.16, top, 0, -0.07, 0, 14));   // short sleeve
-    const elbow = new T.Group(); elbow.position.y = -0.32; elbow.rotation.x = kim ? -0.18 : (side < 0 ? -0.9 : -0.18); arm.add(elbow);
+    const elbow = new T.Group(); elbow.position.y = -0.32; elbow.rotation.x = kim ? -0.18 : (side < 0 ? -0.9 : -0.18); arm.add(elbow); elbows.push(elbow);
     elbow.add(limb(0.28, kim ? top : skinMat, 1.75));
     elbow.add(ball(0.056, skinMat, 0, -0.3, 0, 1, 1.15, 0.8));
     if (!kim && side < 0){ const ph = box(0.05, 0.1, 0.01, phoneMat, 0, -0.33, 0.045); ph.rotation.x = -0.5; elbow.add(ph); }
@@ -1063,7 +1101,7 @@ function makeFigure(kind, hex, isMe){
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.016; g.add(ring);
   }
   body.traverse(m => { if (m.isMesh && !m.material.transparent) m.castShadow = true; });
-  return { g, body, head, abd, hip, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], eyes: [], mats: [top, faceMat] };
+  return { g, body, head, abd, hip, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], handR: elbows[1], eyes: [], mats: [top, faceMat] };
 }
 
 function nameCanvas(name, isMe){
@@ -1153,6 +1191,7 @@ class Avatar {
     this.setAvg(o.avg || null);
     this.x = o.x || 0; this.z = o.z || 0; this.r = o.r != null ? o.r : Math.PI; this.tx = this.x; this.tz = this.z; this.tr = this.r;
     this.sitting = false; this.speed = 0; this.phase = 0;
+    this.crouch = false; this.jumpT = -1; this.shootT = -1; this.gun = null;
   }
   setName(name, force){
     if (name === this.name && !force) return;
@@ -1180,6 +1219,30 @@ class Avatar {
     this.chatSprite.visible = true;
   }
   hush(){ this.chatSprite.visible = false; this.chatText = null; this.chatUntil = 0; }
+  // Ctrl: squat on the spot (walking stands back up)
+  toggleCrouch(){ if (this.jumpT >= 0) return; this.crouch = !this.crouch; if (this.crouch) this.sitting = false; }
+  // Space: a short hop; works while walking, and stands up out of a seat or a squat
+  jump(){ if (this.jumpT >= 0) return; this.jumpT = 0; this.sitting = false; this.crouch = false; }
+  // Alt: raise the right arm and fire a pistol into the air (flash, recoil, a 탕! pop)
+  shoot(){
+    if (this.shootT >= 0 && this.shootT < 0.25) return;
+    if (!this.gun){
+      const gun = new T.Group();
+      gun.add(box(0.03, 0.15, 0.035, gunMat, 0, -0.07, 0));       // barrel, along the forearm
+      gun.add(box(0.028, 0.05, 0.08, gunMat, 0, 0.0, -0.035));     // grip under the hand
+      const flash = new T.Sprite(new T.SpriteMaterial({ map: flashTex, color: '#ffd36a', transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+      flash.scale.set(0.34, 0.34, 1); flash.position.set(0, -0.2, 0); gun.add(flash);
+      const pop = new T.Sprite(new T.SpriteMaterial({ map: popTex, transparent: true, depthTest: false, depthWrite: false }));
+      pop.scale.set(0.5, 0.25, 1); pop.position.set(0.26, -0.4, 0.3); pop.renderOrder = 12; gun.add(pop);   // beside and above the muzzle, so it also shows from behind
+      gun.position.set(0, -0.33, 0); gun.userData.noPick = true;
+      this.p.handR.add(gun);
+      this.gun = gun; this.flash = flash; this.pop = pop;
+    }
+    this.shootT = 0; this.gun.visible = true;
+    bang();
+    if (this.isMe) camShake = 0.05;
+  }
+
   update(dt, t){
     const P = this.p;
     this.g.position.set(this.x, 0, this.z);
@@ -1208,6 +1271,41 @@ class Avatar {
       P.legL.rotation.x = P.legR.rotation.x = -1.45;
       P.kneeL.rotation.x = P.kneeR.rotation.x = 1.35;
       P.armL.rotation.x = P.armR.rotation.x = -0.45;
+    } else if (this.crouch && this.jumpT < 0){
+      // a squat: knees deep, body low, leaning a little forward
+      by = -0.3;
+      P.legL.rotation.x = P.legR.rotation.x = -1.25;
+      P.kneeL.rotation.x = P.kneeR.rotation.x = 1.95;
+      P.armL.rotation.x = P.armR.rotation.x = -0.35;
+      P.abd.rotation.x = 0.18;
+    }
+    if (this.jumpT >= 0){
+      this.jumpT += dt;
+      const u = this.jumpT / JUMP_T;
+      if (u >= 1) this.jumpT = -1;
+      else {
+        const k = Math.sin(u * Math.PI);
+        by += 4 * JUMP_H * u * (1 - u);
+        P.legL.rotation.x = P.legR.rotation.x = -0.45 * k;          // legs tuck under
+        P.kneeL.rotation.x = P.kneeR.rotation.x = 1.1 * k;
+        P.armL.rotation.x = P.armR.rotation.x = -0.9 * k;            // arms swing up
+        P.armL.rotation.z = 0.5 * k; P.armR.rotation.z = -0.5 * k;
+      }
+    }
+    if (this.shootT >= 0){
+      this.shootT += dt;
+      const u = this.shootT;
+      if (u > SHOT_T){ this.shootT = -1; this.gun.visible = false; }
+      else {
+        const settle = Math.min(1, u / 0.08), recoil = Math.exp(-u * 14) * 0.55, fade = 1 - smooth(SHOT_T - 0.25, SHOT_T, u);
+        P.armR.rotation.x = -1.55 * settle + recoil;                 // arm forward, kicked up by the recoil
+        P.armR.rotation.z = -0.12 * settle;
+        P.abd.rotation.x = -0.08 * recoil;
+        this.flash.visible = u < 0.09; this.flash.material.rotation = u * 40;
+        this.pop.visible = u > 0.03 && fade > 0;
+        const ps = 0.2 + Math.min(1, u * 6) * 0.12; this.pop.scale.set(ps * 2, ps, 1); this.pop.material.opacity = fade;
+        this.pop.position.y = -0.42 + Math.min(1, u * 2) * 0.16;
+      }
     }
     P.body.position.y = by;
     this.g.rotation.y = ry;
@@ -1277,7 +1375,7 @@ function updatePlayer(dt){
   if (keys.has('KeyA') || keys.has('ArrowLeft')) s -= 1;
   let vx = 0, vz = 0;
   if (f || s){
-    target = null; player.sitting = false;
+    target = null; player.sitting = false; player.crouch = false;
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = -fz, rz = fx;
     vx = fx * f + rx * s; vz = fz * f + rz * s;
     const l = Math.hypot(vx, vz); vx = vx / l * SPEED; vz = vz / l * SPEED;
@@ -1309,7 +1407,7 @@ const wantPos = new T.Vector3(), wantLook = new T.Vector3();
 function baseFov(){ return camera.aspect < 0.8 ? 86 : 55; }
 function updateCamera(dt){
   const wantFov = baseFov();
-  const hy = player.sitting ? 1.25 : 1.5;
+  const hy = player.sitting || player.crouch ? 1.25 : 1.5;
   wantPos.set(
     player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist,
     hy + 0.6 + Math.sin(camPitch) * camDist,
@@ -1321,6 +1419,7 @@ function updateCamera(dt){
   const k = 1 - Math.exp(-dt * 6);
   camPos.lerp(wantPos, k); camLook.lerp(wantLook, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
+  if (camShake > 0){ camera.position.x += (Math.random() - 0.5) * camShake; camera.position.y += (Math.random() - 0.5) * camShake; camShake = Math.max(0, camShake - dt * 0.3); }
   if (Math.abs(camera.fov - wantFov) > 0.05){ camera.fov += (wantFov - camera.fov) * k; camera.updateProjectionMatrix(); }
 }
 
@@ -1345,10 +1444,10 @@ function tapAt(cx, cy){
   if (h.object === seatMesh && h.instanceId != null){
     let best = -1, bd = Infinity;
     seats.forEach((s, i) => { if (s.bench !== h.instanceId) return; const d = Math.abs(s.x - h.point.x); if (d < bd){ bd = d; best = i; } });
-    if (best >= 0){ const s = seats[best]; target = { x: s.x, z: s.z, seat: best }; player.sitting = false; showMarker(s.x, s.z); }
+    if (best >= 0){ const s = seats[best]; target = { x: s.x, z: s.z, seat: best }; player.sitting = false; player.crouch = false; showMarker(s.x, s.z); }
   } else {
     const x = clampRoom(h.point.x, ROOM.x0 + 0.6, ROOM.x1 - 0.6), z = clampRoom(h.point.z, ROOM.z0 + 1.4, ROOM.z1 - 0.6);
-    target = { x, z, seat: -1 }; player.sitting = false; showMarker(x, z);
+    target = { x, z, seat: -1 }; player.sitting = false; player.crouch = false; showMarker(x, z);
   }
   dropHint();
 }
@@ -1390,12 +1489,28 @@ canvas.addEventListener('pointerup', e => endPointer(e, false));
 canvas.addEventListener('pointercancel', e => endPointer(e, true));
 canvas.addEventListener('wheel', e => { e.preventDefault(); camDist = clampRoom(camDist * (1 + e.deltaY * 0.0012), 3, 16); }, { passive: false });
 
+const actsCrouch = $('#acts button[data-act="crouch"]');
+const ACT_KEYS = { ControlLeft: 'crouch', ControlRight: 'crouch', AltLeft: 'shoot', AltRight: 'shoot' };
+let armedKey = null;   // a modifier pressed on its own, waiting for its key-up
+function doAct(act){
+  if (blocked || !avgPanel.hidden) return;
+  if (act === 'crouch') player.toggleCrouch();
+  else if (act === 'jump') player.jump();
+  else if (act === 'shoot') player.shoot();
+  dropHint();
+}
 window.addEventListener('keydown', e => {
+  const typing = e.target && e.target.closest && e.target.closest('input, textarea, select');
+  if (ACT_KEYS[e.code] && !typing && avgPanel.hidden && !blocked){ if (!e.repeat) armedKey = e.code; e.preventDefault(); return; }
+  armedKey = null;
+  if (e.code === 'Space' && !typing && avgPanel.hidden && !blocked && !(e.target && e.target.closest && e.target.closest('button, a, summary'))){
+    e.preventDefault(); if (!e.repeat) doAct('jump'); return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey || blocked) return;
   // while the 평단 panel is open (focus in it or not), keys never walk the ant; Esc closes it
   if (!avgPanel.hidden){ if (e.key === 'Escape'){ e.preventDefault(); closeAvg(true); } return; }
   if (!peerCard.hidden && e.key === 'Escape'){ e.preventDefault(); closePeer(); return; }
-  if (e.target && e.target.closest && e.target.closest('input, textarea, select')) return;
+  if (typing) return;
   // Enter jumps into the chat box (not while a button or link has focus)
   if (e.key === 'Enter' && (e.target === document.body || e.target === canvas) && !chatBar.hidden && !chatInput.disabled){
     e.preventDefault(); chatInput.focus({ preventScroll: true }); return;
@@ -1405,8 +1520,17 @@ window.addEventListener('keydown', e => {
     if (e.code.startsWith('Arrow')) e.preventDefault();
   }
 });
-window.addEventListener('keyup', e => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('keyup', e => {
+  keys.delete(e.code);
+  if (ACT_KEYS[e.code]){ e.preventDefault(); if (armedKey === e.code) doAct(ACT_KEYS[e.code]); armedKey = null; }
+});
+window.addEventListener('blur', () => { keys.clear(); armedKey = null; });
+// touch buttons: the same three actions
+$('#acts').addEventListener('pointerdown', e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  e.preventDefault(); doAct(b.dataset.act);
+  if (b.dataset.act === 'crouch') b.classList.toggle('on', player.crouch);
+});
 
 /* ------------------------------------------------------------------
    평단 입력: pick 비트코인 or 이더리움, type an average price,
@@ -1984,6 +2108,7 @@ function frame(now){
 
   updatePlayer(dt);
   player.update(dt, t);
+  if (actsCrouch.classList.contains('on') !== player.crouch) actsCrouch.classList.toggle('on', player.crouch);
   updateOthers(dt, t);
   updateNpcs(dt, t);
   updateCamera(dt);
