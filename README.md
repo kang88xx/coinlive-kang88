@@ -39,15 +39,42 @@ http://localhost:4200
 
 ## 동작 범위와 한계
 
-페이지는 실행 시 원본 백엔드에 직접 접속합니다.
+페이지는 실행 시 아래 서버에 접속합니다.
 
 - `https://api.hyperliquid.xyz/info` (비트코인·이더리움 시세, CORS 허용) — 동작함
-- `https://api.korulive.com/anchor` (환율·코스피 기준값, CORS 허용) — 동작함
-- `wss://api.korulive.com/gaekjang/ws` (객장 채팅·개미 위치 동기화, Cloudflare Durable Object) —
-  **korulive.com 이외 출처에서는 핸드셰이크가 거부됩니다.** 그래서 미러에서는 상단 상태가
-  "연결 중"에 머물고 채팅 입력이 열리지 않습니다. 이 서버 코드는 공개되어 있지 않아 사본에
-  포함할 수 없습니다. 채팅을 살리려면 `rea/`로 프로토콜을 분석해 자체 웹소켓 서버를 만들고
-  `?ws=wss://...` 쿼리로 연결해야 합니다. (페이지가 이미 로컬 실행 시 `?ws=` 재지정을 지원합니다.)
+- `https://api.korulive.com/anchor` (환율 기준값, CORS 허용) — 동작함
+- `https://api.upbit.com/v1/ticker` (업비트 원화 시세) — 동작함. 배포 도메인에는 분당 요청 수 제한이 있어 15초마다 가져옵니다.
+- 객장 채팅·캐릭터 동기화 웹소켓 — 원래의 `api.korulive.com` 서버는 다른 출처를 거부하므로, `worker/`의 자체 서버에 접속합니다 (아래).
+
+## 채팅 서버 (`worker/`)
+
+`site/index.html`이 쓰는 객장 프로토콜(hello/tick/full/cx, 상태 차분, 채팅 제한)을 그대로 구현한 서버입니다.
+
+| 파일 | 내용 |
+| --- | --- |
+| `worker/src/room.js` | 방 로직 (플랫폼 독립). 정원 100명, 주소당 12연결, 채팅은 입장 1분 뒤부터 3초 간격 40자, 같은 말·링크·연락처·욕설 거부, 같은 페이지 키 재접속 시 이전 연결 교체. |
+| `worker/src/index.js` | Cloudflare Worker + Durable Object (`GaekjangRoom`, 웹소켓 하이버네이션). 방 번호마다 객체 하나. |
+| `worker/bun-server.js` | 같은 Room 클래스를 Bun으로 띄우는 로컬 개발 서버. |
+| `worker/wrangler.toml` | 배포 설정. `ALLOWED_ORIGINS`에 허용 출처, `CHAT_WAIT_MS`에 채팅 대기 시간. |
+
+로컬 테스트:
+
+```sh
+CHAT_WAIT_MS=0 LOG=1 bun worker/bun-server.js      # ws://127.0.0.1:8787
+python3 -m http.server 4200 --directory site
+# http://localhost:4200/?ws=ws://127.0.0.1:8787  (?ws= 는 localhost에서만 먹힘)
+```
+
+배포 (Cloudflare 계정 필요, 무료 플랜으로 충분):
+
+```sh
+cd worker
+bun x wrangler@4 login      # 최초 1회, 브라우저 로그인
+bun x wrangler@4 deploy     # https://coinlive-chat.<계정>.workers.dev
+bun x wrangler@4 secret put SK_SECRET   # 선택: 차단용 발언자 키의 비밀값
+```
+
+배포 주소를 `site/index.html`의 `WS_BASE`에 넣으면 됩니다. 채팅 서버가 죽어 있으면 페이지는 10초 뒤 "혼자 보는 중"으로 표시하고 계속 재접속합니다.
 
 ## 검증 (2026-11-03, 헤드리스 Chromium 1440×900 / 390×844)
 
