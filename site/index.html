@@ -1352,11 +1352,12 @@ function wrapA(a){ const t = Math.PI * 2; return ((a + Math.PI) % t + t) % t - M
 
 const keys = new Set();
 const SPEED = 3.2;
+const CAM_MIN = 4, CAM_MAX = 16;
 let camYaw = 0, camPitch = 0.2, camDist = 7.4;
 // ?cam=yaw,pitch,dist starts the camera somewhere else (used for screenshots)
 let camLookY = null;
 (function(){ const q = new URLSearchParams(location.search).get('cam'); if (!q) return; const [y, p, d, l] = q.split(',').map(Number);
-  if (isFinite(y)) camYaw = y; if (isFinite(p)) camPitch = clampRoom(p, -0.05, 0.95); if (isFinite(d)) camDist = clampRoom(d, 1.2, 16); if (isFinite(l)) camLookY = l; })();
+  if (isFinite(y)) camYaw = y; if (isFinite(p)) camPitch = clampRoom(p, -0.05, 0.95); if (isFinite(d)) camDist = clampRoom(d, CAM_MIN, CAM_MAX); if (isFinite(l)) camLookY = l; })();
 function updatePlayer(dt){
   let f = 0, s = 0;
   if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
@@ -1405,7 +1406,9 @@ function updateCamera(dt){
   wantPos.x = clampRoom(wantPos.x, ROOM.x0 + 0.3, ROOM.x1 - 0.3);
   wantPos.z = clampRoom(wantPos.z, ROOM.z0 + 0.5, ROOM.z1 - 0.3);
   wantPos.y = clampRoom(wantPos.y, 0.6, ROOM.h - 0.4);
-  wantLook.set(player.x, camLookY != null ? camLookY : hy + 1.75, player.z);
+  // look higher the farther out the camera is: the board from the back rows, the character up close
+  const lookY = hy + 1.75 + (camDist < 7.4 ? 0.3 : 0.21) * (camDist - 7.4);   // the default framing at 7.4 m; lower when closer, higher when farther
+  wantLook.set(player.x, camLookY != null ? camLookY : lookY, player.z);
   const k = 1 - Math.exp(-dt * 6);
   camPos.lerp(wantPos, k); camLook.lerp(wantLook, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
@@ -1457,7 +1460,7 @@ canvas.addEventListener('pointermove', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pointers.size === 2){
     const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchD > 0 && d > 0) camDist = clampRoom(camDist * pinchD / d, 3, 16);
+    if (pinchD > 0 && d > 0) camDist = clampRoom(camDist * pinchD / d, CAM_MIN, CAM_MAX);
     pinchD = d; return;
   }
   if (!drag) return;
@@ -1477,7 +1480,7 @@ function endPointer(e, cancelled){
 }
 canvas.addEventListener('pointerup', e => endPointer(e, false));
 canvas.addEventListener('pointercancel', e => endPointer(e, true));
-canvas.addEventListener('wheel', e => { e.preventDefault(); camDist = clampRoom(camDist * (1 + e.deltaY * 0.0012), 3, 16); }, { passive: false });
+canvas.addEventListener('wheel', e => { e.preventDefault(); camDist = clampRoom(camDist * (1 + e.deltaY * 0.0012), CAM_MIN, CAM_MAX); }, { passive: false });
 
 const ACT_KEYS = { ControlLeft: 'shoot', ControlRight: 'shoot' };
 function doAct(act){
