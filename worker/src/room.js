@@ -20,6 +20,7 @@ export const CHAT_GAP_MS = 3000;   // between two lines from one person
 export const SAME_MS = 20000;      // the same line again within this → refused
 export const TICK_MS = 120;        // state updates are batched into ticks this often
 export const NAME_MAX = 16;
+export const MSG_PER_SEC = 40;   // more than this from one socket → it is a flood, close it
 const ROOM = { x0: -11, x1: 11, z0: -10, z1: 14 };
 const BODY_N = 6;
 const STOCKS = new Set(['BTC', 'ETH']);
@@ -110,6 +111,10 @@ export class Room {
 
   message(conn, data){
     if (!conn || !conn.id || !this.conns.has(conn.id)) return;
+    // a flood from one socket (the page sends at most ~7 state updates a second) is dropped, not relayed
+    const sec = Math.floor(this.opts.now() / 1000);
+    if (conn.rateSec !== sec){ conn.rateSec = sec; conn.rateN = 0; }
+    if (++conn.rateN > MSG_PER_SEC){ this.leave(conn, 1008, 'flood'); return; }
     if (typeof data !== 'string'){ return; }
     if (data === 'ping'){ conn.send('pong'); return; }
     if (data.length > 2000) return;
