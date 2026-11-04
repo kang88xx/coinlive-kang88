@@ -217,7 +217,7 @@ const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: r
    Market data, computed exactly like korulive.com's cards:
    - korulive anchor, every 60 s (its cron runs once a minute, CDN cached)
    - Hyperliquid metaAndAssetCtxs (main perps), every 10 s: markPx and prevDayPx of BTC, ETH
-   - Upbit ticker (KRW-BTC, KRW-ETH, KRW-USDT), every 10 s: domestic won prices for the tape and 김프
+   - Upbit ticker (KRW-BTC, KRW-ETH, KRW-USDT), every 15 s: domestic won prices for the tape and 김프
    - Hyperliquid candleSnapshot 1m, every 60 s (the live candle follows each 10 s mark in between)
    FX (환율)  = usdtKrwLive × usdKrwAnchor / usdtKrwAnchor   (korulive's synthetic rate)
    Coin won   = markPx × FX;  change = (markPx / prevDayPx - 1) × 100  (vs 24 h ago)
@@ -238,7 +238,7 @@ const HL_INFO = 'https://api.hyperliquid.xyz/info';
 const KORU_ANCHOR = 'https://api.korulive.com/anchor';
 const UPBIT = 'https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH,KRW-USDT';
 const UP_KEYS = ['BTC', 'ETH', 'USDT'];
-const POLL_MS = 10000, ANCHOR_MS = 60000, CANDLE_MS = 60000, CANDLE_INT = 60000, CANDLE_SPAN = 75;
+const POLL_MS = 10000, UPBIT_MS = 15000, ANCHOR_MS = 60000, CANDLE_MS = 60000, CANDLE_INT = 60000, CANDLE_SPAN = 75;
 const KST = 9 * 3600 * 1000;
 
 const M = { usdt: null, usdKrw: null, anchor: null, hlAt: 0, anchorAt: 0, started: Date.now(), dirty: true };
@@ -352,7 +352,7 @@ const pollRefs = () => { if (!document.hidden) once('anchor', pollAnchor); };
 const pollKr = () => { if (!document.hidden) once('upbit', pollUpbit); };
 pollChart(); pollPrices(); pollRefs(); pollKr();
 setInterval(pollPrices, POLL_MS);
-setInterval(pollKr, POLL_MS);
+setInterval(pollKr, UPBIT_MS);   // Upbit allows this origin only a few requests a minute
 setInterval(pollChart, CANDLE_MS);
 setInterval(pollRefs, ANCHOR_MS);
 document.addEventListener('visibilitychange', () => { if (!document.hidden){ pollPrices(); pollChart(); pollRefs(); pollKr(); } });
