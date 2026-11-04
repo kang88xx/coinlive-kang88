@@ -838,7 +838,7 @@ const popTex = (function(){ const c = document.createElement('canvas'); c.width 
 let camShake = 0;
 // a short filtered noise burst for the shot (WebAudio, created on the first key press)
 let actx = null;
-function bang(){
+function bang(vol){
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === 'suspended') actx.resume();
@@ -846,7 +846,7 @@ function bang(){
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
     const src = actx.createBufferSource(); src.buffer = buf;
     const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1600;
-    const g = actx.createGain(); g.gain.value = 0.22;
+    const g = actx.createGain(); g.gain.value = vol || 0.22;
     src.connect(f); f.connect(g); g.connect(actx.destination); src.start();
   } catch (e) {}
 }
@@ -1236,7 +1236,7 @@ class Avatar {
       this.gun = gun; this.flash = flash; this.pop = pop;
     }
     this.shootT = 0; this.gun.visible = true;
-    bang();
+    bang(this.isMe ? 0.22 : 0.09);
     if (this.isMe) camShake = 0.05;
   }
 
@@ -1487,6 +1487,8 @@ function doAct(act){
   if (blocked || !avgPanel.hidden) return;
   if (act === 'jump') player.jump();
   else if (act === 'shoot') player.shoot();
+  else return;
+  sendEvent(act);   // so everyone else sees it too
   dropHint();
 }
 window.addEventListener('keydown', e => {
@@ -1656,6 +1658,9 @@ function sendState(force){
   if (hasOwn(out, 'a')) lastAvgSent = now;
   ws.send(JSON.stringify(out)); sent = st; lastSent = now;
 }
+
+// a one-off action (jump, shot) goes out as its own message; the room relays it in the next tick
+function sendEvent(e){ if (isOpen()) try { ws.send(JSON.stringify({ t: 'e', e })); } catch (err) {} }
 
 /* ---- chat ---- */
 const chatBar = $('#chatBar'), chatInput = $('#chatInput'), chatSend = $('#chatSend'), toastEl = $('#toast');
@@ -1878,6 +1883,13 @@ function onHello(m){
 }
 function onTick(m){
   if (Array.isArray(m.up)) for (const p of m.up) upsertPeer(p);
+  // other people's jumps and shots
+  if (Array.isArray(m.ev)) for (const v of m.ev){
+    if (!v || typeof v.id !== 'string' || v.id === myId) continue;
+    const av = others.get(v.id);
+    if (!av || isHidden(av)) continue;
+    if (v.e === 'jump') av.jump(); else if (v.e === 'shoot') av.shoot();
+  }
   if (Array.isArray(m.chat)) for (const c of m.chat){
     if (!c || typeof c.id !== 'string') continue;
     const text = cleanChatText(c.m);

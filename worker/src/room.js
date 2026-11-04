@@ -4,9 +4,10 @@
 //
 //   client → server   {t:'s', n, c, x, z, r, s, a}   my state (only the changed fields)
 //                     {t:'c', m}                      a chat line
+//                     {t:'e', e:'jump'|'shoot'}       a one-off action
 //                     'ping'                          keepalive (answered with 'pong')
 //   server → client   {t:'hello', id, room, peers, count, chat, now, chatAt, canChat}
-//                     {t:'tick', up:[partial states], chat:[{id,m}], left:[ids], count}
+//                     {t:'tick', up:[partial states], chat:[{id,m}], ev:[{id,e}], left:[ids], count}
 //                     {t:'full', cap, why?}   then close 4001
 //                     {t:'cx', why, left?}     a chat line was refused
 //
@@ -19,6 +20,8 @@ export const CHAT_MAX = 40;        // characters per line
 export const CHAT_GAP_MS = 3000;   // between two lines from one person
 export const SAME_MS = 20000;      // the same line again within this → refused
 export const TICK_MS = 120;        // state updates are batched into ticks this often
+export const EVENT_GAP_MS = 150;   // one action per person per this long
+const EVENTS = new Set(['jump', 'shoot']);
 export const NAME_MAX = 16;
 export const MSG_PER_SEC = 40;   // more than this from one socket → it is a flood, close it
 const ROOM = { x0: -11, x1: 11, z0: -10, z1: 14 };
@@ -58,7 +61,7 @@ export class Room {
   constructor(opts){
     this.opts = Object.assign({ roomNo: 1, secret: 'coinlive-dev', chatWaitMs: 60000, now: () => Date.now() }, opts);
     this.conns = new Map();   // id → conn
-    this.pending = { up: new Map(), chat: [], left: [] };
+    this.pending = { up: new Map(), chat: [], ev: [], left: [] };
     this.lastFlush = 0; this.flushT = 0;
   }
   get count(){ return this.conns.size; }
@@ -122,6 +125,7 @@ export class Room {
     if (!m || typeof m !== 'object') return;
     if (m.t === 's') this.onState(conn, m);
     else if (m.t === 'c') this.onChat(conn, m);
+    else if (m.t === 'e') this.onEvent(conn, m);
   }
 
   onState(conn, m){
@@ -175,6 +179,15 @@ export class Room {
     this.flush();   // words go out right away; positions can wait for the next tick
   }
 
+  // a jump or a shot: relayed to everyone as soon as possible, at most a few a second per person
+  onEvent(conn, m){
+    if (!conn.st || !EVENTS.has(m.e)) return;
+    const now = this.opts.now();
+    if (now - (conn.lastEv || 0) < EVENT_GAP_MS) return;
+    conn.lastEv = now;
+    this.pending.ev.push({ id: conn.id, e: m.e });
+    this.flush();
+  }
   queueCount(){ this.pending.count = true; this.schedule(); }
   // batch state updates: flush now if the last tick is old enough, otherwise soon
   schedule(){
@@ -186,12 +199,13 @@ export class Room {
   flush(){
     if (this.flushT){ clearTimeout(this.flushT); this.flushT = 0; }
     const p = this.pending;
-    if (!p.up.size && !p.chat.length && !p.left.length && !p.count) return;
+    if (!p.up.size && !p.chat.length && !p.ev.length && !p.left.length && !p.count) return;
     const tick = { t: 'tick', count: this.conns.size };
     if (p.up.size) tick.up = [...p.up.values()];
     if (p.chat.length) tick.chat = p.chat;
+    if (p.ev.length) tick.ev = p.ev;
     if (p.left.length) tick.left = p.left;
-    this.pending = { up: new Map(), chat: [], left: [] };
+    this.pending = { up: new Map(), chat: [], ev: [], left: [] };
     this.lastFlush = this.opts.now();
     const s = JSON.stringify(tick);
     for (const c of this.conns.values()) c.send(s);
