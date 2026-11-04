@@ -136,7 +136,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
 .hint{border:1px solid var(--line)}
 .acts{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));display:none;flex-direction:column;gap:8px;z-index:2}
 .acts button{appearance:none;width:56px;height:56px;border:1px solid var(--line);border-radius:50%;background:var(--glass);color:var(--text);font:600 13px var(--font-ui);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.acts button:active,.acts button.on{background:var(--led);color:#301315;border-color:var(--led)}
+.acts button:active{background:var(--led);color:#301315;border-color:var(--led)}
 @media (pointer:coarse){ .acts{display:flex} }
 .avg-panel,.peer-card{box-shadow:0 18px 48px rgba(0,0,0,.55)}
 </style>
@@ -181,7 +181,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
     </form>
   </div>
 
-  <p class="hint" id="hint">바닥 클릭 이동 · 의자 클릭 앉기 · Ctrl 쪼그리기 · Space 점프 · Alt 발사 · 드래그로 둘러보기</p>
+  <p class="hint" id="hint">바닥 클릭 이동 · 의자 클릭 앉기 · Space 점프 · Ctrl 발사 · 드래그로 둘러보기</p>
 
   <form class="chatbar" id="chatBar" autocomplete="off">
     <input id="chatInput" maxlength="80" enterkeyhint="send" placeholder="연결되면 쓸 수 있어요" aria-label="채팅 (Enter)" disabled>
@@ -190,9 +190,8 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
     </button>
   </form>
   <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
-  <!-- touch screens have no Ctrl/Space/Alt: the same three actions as buttons -->
+  <!-- touch screens have no Space/Ctrl: the same two actions as buttons -->
   <div class="acts" id="acts" aria-label="동작">
-    <button type="button" data-act="crouch" aria-label="쪼그리기">앉기</button>
     <button type="button" data-act="jump" aria-label="점프">점프</button>
     <button type="button" data-act="shoot" aria-label="발사">발사</button>
   </div>
@@ -1191,7 +1190,7 @@ class Avatar {
     this.setAvg(o.avg || null);
     this.x = o.x || 0; this.z = o.z || 0; this.r = o.r != null ? o.r : Math.PI; this.tx = this.x; this.tz = this.z; this.tr = this.r;
     this.sitting = false; this.speed = 0; this.phase = 0;
-    this.crouch = false; this.jumpT = -1; this.shootT = -1; this.gun = null;
+    this.jumpT = -1; this.shootT = -1; this.gun = null;
   }
   setName(name, force){
     if (name === this.name && !force) return;
@@ -1219,11 +1218,9 @@ class Avatar {
     this.chatSprite.visible = true;
   }
   hush(){ this.chatSprite.visible = false; this.chatText = null; this.chatUntil = 0; }
-  // Ctrl: squat on the spot (walking stands back up)
-  toggleCrouch(){ if (this.jumpT >= 0) return; this.crouch = !this.crouch; if (this.crouch) this.sitting = false; }
-  // Space: a short hop; works while walking, and stands up out of a seat or a squat
-  jump(){ if (this.jumpT >= 0) return; this.jumpT = 0; this.sitting = false; this.crouch = false; }
-  // Alt: raise the right arm and fire a pistol into the air (flash, recoil, a 탕! pop)
+  // Space: a short hop; works while walking, and stands up out of a seat
+  jump(){ if (this.jumpT >= 0) return; this.jumpT = 0; this.sitting = false; }
+  // Ctrl: raise the right arm and fire a pistol into the air (flash, recoil, a 탕! pop)
   shoot(){
     if (this.shootT >= 0 && this.shootT < 0.25) return;
     if (!this.gun){
@@ -1271,13 +1268,6 @@ class Avatar {
       P.legL.rotation.x = P.legR.rotation.x = -1.45;
       P.kneeL.rotation.x = P.kneeR.rotation.x = 1.35;
       P.armL.rotation.x = P.armR.rotation.x = -0.45;
-    } else if (this.crouch && this.jumpT < 0){
-      // a squat: knees deep, body low, leaning a little forward
-      by = -0.3;
-      P.legL.rotation.x = P.legR.rotation.x = -1.25;
-      P.kneeL.rotation.x = P.kneeR.rotation.x = 1.95;
-      P.armL.rotation.x = P.armR.rotation.x = -0.35;
-      P.abd.rotation.x = 0.18;
     }
     if (this.jumpT >= 0){
       this.jumpT += dt;
@@ -1375,7 +1365,7 @@ function updatePlayer(dt){
   if (keys.has('KeyA') || keys.has('ArrowLeft')) s -= 1;
   let vx = 0, vz = 0;
   if (f || s){
-    target = null; player.sitting = false; player.crouch = false;
+    target = null; player.sitting = false;
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = -fz, rz = fx;
     vx = fx * f + rx * s; vz = fz * f + rz * s;
     const l = Math.hypot(vx, vz); vx = vx / l * SPEED; vz = vz / l * SPEED;
@@ -1407,7 +1397,7 @@ const wantPos = new T.Vector3(), wantLook = new T.Vector3();
 function baseFov(){ return camera.aspect < 0.8 ? 86 : 55; }
 function updateCamera(dt){
   const wantFov = baseFov();
-  const hy = player.sitting || player.crouch ? 1.25 : 1.5;
+  const hy = player.sitting ? 1.25 : 1.5;
   wantPos.set(
     player.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist,
     hy + 0.6 + Math.sin(camPitch) * camDist,
@@ -1444,10 +1434,10 @@ function tapAt(cx, cy){
   if (h.object === seatMesh && h.instanceId != null){
     let best = -1, bd = Infinity;
     seats.forEach((s, i) => { if (s.bench !== h.instanceId) return; const d = Math.abs(s.x - h.point.x); if (d < bd){ bd = d; best = i; } });
-    if (best >= 0){ const s = seats[best]; target = { x: s.x, z: s.z, seat: best }; player.sitting = false; player.crouch = false; showMarker(s.x, s.z); }
+    if (best >= 0){ const s = seats[best]; target = { x: s.x, z: s.z, seat: best }; player.sitting = false; showMarker(s.x, s.z); }
   } else {
     const x = clampRoom(h.point.x, ROOM.x0 + 0.6, ROOM.x1 - 0.6), z = clampRoom(h.point.z, ROOM.z0 + 1.4, ROOM.z1 - 0.6);
-    target = { x, z, seat: -1 }; player.sitting = false; player.crouch = false; showMarker(x, z);
+    target = { x, z, seat: -1 }; player.sitting = false; showMarker(x, z);
   }
   dropHint();
 }
@@ -1489,20 +1479,16 @@ canvas.addEventListener('pointerup', e => endPointer(e, false));
 canvas.addEventListener('pointercancel', e => endPointer(e, true));
 canvas.addEventListener('wheel', e => { e.preventDefault(); camDist = clampRoom(camDist * (1 + e.deltaY * 0.0012), 3, 16); }, { passive: false });
 
-const actsCrouch = $('#acts button[data-act="crouch"]');
-const ACT_KEYS = { ControlLeft: 'crouch', ControlRight: 'crouch', AltLeft: 'shoot', AltRight: 'shoot' };
-let armedKey = null;   // a modifier pressed on its own, waiting for its key-up
+const ACT_KEYS = { ControlLeft: 'shoot', ControlRight: 'shoot' };
 function doAct(act){
   if (blocked || !avgPanel.hidden) return;
-  if (act === 'crouch') player.toggleCrouch();
-  else if (act === 'jump') player.jump();
+  if (act === 'jump') player.jump();
   else if (act === 'shoot') player.shoot();
   dropHint();
 }
 window.addEventListener('keydown', e => {
   const typing = e.target && e.target.closest && e.target.closest('input, textarea, select');
-  if (ACT_KEYS[e.code] && !typing && avgPanel.hidden && !blocked){ if (!e.repeat) armedKey = e.code; e.preventDefault(); return; }
-  armedKey = null;
+  if (ACT_KEYS[e.code] && !typing && avgPanel.hidden && !blocked){ if (!e.repeat) doAct(ACT_KEYS[e.code]); e.preventDefault(); return; }
   if (e.code === 'Space' && !typing && avgPanel.hidden && !blocked && !(e.target && e.target.closest && e.target.closest('button, a, summary'))){
     e.preventDefault(); if (!e.repeat) doAct('jump'); return;
   }
@@ -1520,16 +1506,12 @@ window.addEventListener('keydown', e => {
     if (e.code.startsWith('Arrow')) e.preventDefault();
   }
 });
-window.addEventListener('keyup', e => {
-  keys.delete(e.code);
-  if (ACT_KEYS[e.code]){ e.preventDefault(); if (armedKey === e.code) doAct(ACT_KEYS[e.code]); armedKey = null; }
-});
-window.addEventListener('blur', () => { keys.clear(); armedKey = null; });
+window.addEventListener('keyup', e => keys.delete(e.code));
+window.addEventListener('blur', () => keys.clear());
 // touch buttons: the same three actions
 $('#acts').addEventListener('pointerdown', e => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
   e.preventDefault(); doAct(b.dataset.act);
-  if (b.dataset.act === 'crouch') b.classList.toggle('on', player.crouch);
 });
 
 /* ------------------------------------------------------------------
@@ -2108,7 +2090,6 @@ function frame(now){
 
   updatePlayer(dt);
   player.update(dt, t);
-  if (actsCrouch.classList.contains('on') !== player.crouch) actsCrouch.classList.toggle('on', player.crouch);
   updateOthers(dt, t);
   updateNpcs(dt, t);
   updateCamera(dt);
