@@ -1,0 +1,13 @@
+{
+  "name": "coinlive-chat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun bun-server.js",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
