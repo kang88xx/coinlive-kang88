@@ -1583,9 +1583,9 @@ document.addEventListener('pointerdown', e => {
 });
 
 /* ------------------------------------------------------------------
-   Shared room: everyone on this page sees each other's ants.
-   Server: api.korulive.com/gaekjang/ws (Cloudflare Durable Object,
-   worker/src/gaekjang.ts). There is one room for 100 people. When it is
+   Shared room: everyone on this page sees each other's characters.
+   Server: coinlive-chat.coinlive-chat.workers.dev/gaekjang/ws (our Cloudflare
+   Durable Object, worker/src/index.js). There is one room for 100 people. When it is
    full nobody else gets in: the page shows "객장이 꽉 찼어요" instead of
    the room and walks in by itself once a spot opens up.
    Chat: what you type pops up over your ant for a few seconds (40 chars,
@@ -1597,7 +1597,7 @@ const WS_BASE = (() => {
   // only a local copy of the page may point somewhere else: ?ws=ws://127.0.0.1:8787 (wrangler dev)
   const local = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   const q = local ? new URLSearchParams(location.search).get('ws') : null;
-  return q && /^wss?:\/\/[\w.:\-\[\]]+$/.test(q) ? q : 'wss://api.korulive.com';
+  return q && /^wss?:\/\/[\w.:\-\[\]]+$/.test(q) ? q : 'wss://coinlive-chat.coinlive-chat.workers.dev';   // our own room server (worker/)
 })();
 const FULL_RETRY_MS = 20000;   // while the room is full, check for a free spot about this often
 const SEND_MS = 150;           // my state goes out at most ~7×/s, and only the fields that changed
