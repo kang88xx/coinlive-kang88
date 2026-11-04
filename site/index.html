@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>코인 시부레</title>
+<title>코인 시부레 · 붉은 객장</title>
 <link rel="icon" href="assets/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/favicon.png">
 <meta name="theme-color" content="#0b0d0f">
@@ -14,16 +14,18 @@
    The room is a bright white-toned floor; the HUD keeps its dark glass look over it. */
 :root{
   color-scheme: dark;
-  --bg:#0b0d0f;
-  --glass:rgba(13,15,17,.76);
-  --line:rgba(236,231,220,.14);
-  --text:#ece7dc;
-  --muted:#a59f92;
-  --led:#ffb547;
-  --up:#ff4d57;
-  --down:#3f8cff;
+  --bg:#1a0608;
+  --glass:rgba(46,9,12,.8);
+  --line:rgba(242,193,78,.28);
+  --text:#f7edd9;
+  --muted:#d2b08f;
+  --led:#f2c14e;
+  --up:#ff5560;
+  --down:#5aa2ff;
   --live:#3ad07a;
   --err:#ff8a7a;
+  --vignette:rgba(24,3,4,.6);
+  --brand-glyph:"★";
   --font-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --font-led:"DotGothic16",ui-monospace,"SFMono-Regular",Menlo,monospace;
 }
@@ -40,11 +42,6 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
 .pill{pointer-events:auto;display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 14px;border:1px solid var(--line);border-radius:999px;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .brand{padding-left:5px}
-/* exit back to korulive.com, inside the chip on its left like 산사's 나가기 */
-.exit{display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin-right:-2px;border-radius:50%;color:var(--text);text-decoration:none;flex:none;transition:background .15s ease}
-.exit:hover{background:rgba(236,231,220,.1)}
-.exit:focus-visible{outline:2px solid var(--led);outline-offset:1px}
-.exit svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .brand .mark{font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
 .brand .count{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
@@ -108,9 +105,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
 .gate{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px max(16px,env(safe-area-inset-left,0px));background:var(--bg)}
 .gate-card{width:min(340px,100%);padding:26px 22px 20px;border:1px solid var(--line);border-radius:20px;background:var(--glass);text-align:center}
 .gate-title{margin:0 0 8px;font-size:19px;font-weight:700;letter-spacing:-.01em;word-break:keep-all}
-.gate-text{margin:0 0 20px;font-size:14px;line-height:1.65;color:var(--muted);white-space:pre-line;word-break:keep-all}
-.gate-exit{display:block;padding:12px 10px;border-radius:12px;background:var(--led);color:#1a1206;font-weight:600;text-decoration:none}
-.gate-exit:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.gate-text{margin:0;font-size:14px;line-height:1.65;color:var(--muted);white-space:pre-line;word-break:keep-all}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* phones: smaller HUD so more of the floor stays tappable */
@@ -118,8 +113,6 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
   .hud-top{padding-top:calc(8px + env(safe-area-inset-top,0px));gap:6px}
   .pill{min-height:32px;padding:4px 11px;gap:7px}
   .brand{padding-left:4px}
-  .exit{width:26px;height:26px}
-  .exit svg{width:16px;height:16px}
   .brand .mark{font-size:13px}
   .brand .count{font-size:11.5px;gap:5px}
   .dot{width:6px;height:6px}
@@ -132,8 +125,18 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
   .peer-card{top:calc(48px + env(safe-area-inset-top,0px))}
   .hint{bottom:calc(62px + env(safe-area-inset-bottom,0px));font-size:11.5px;padding:5px 11px}
 }
-@media (prefers-reduced-motion:reduce){ .hint,.chatbar,.seg span,.exit{transition:none} }
+@media (prefers-reduced-motion:reduce){ .hint,.chatbar,.seg span{transition:none} }
+/* polish: a soft vignette over the room, deeper glass on the HUD, a brand glyph */
+#app::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;background:radial-gradient(ellipse 75% 70% at 50% 45%,rgba(0,0,0,0) 50%,var(--vignette) 100%)}
+.hud-top,.avg-panel,.hint,.chatbar,.toast,.peer-card,.gate,.fail{z-index:2}
+.pill{box-shadow:0 10px 28px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.07)}
+.brand .mark{font-size:16px;letter-spacing:-.02em;display:flex;align-items:center;gap:7px}
+.brand .mark::before{content:var(--brand-glyph);font-size:13px;color:var(--led);line-height:1}
+.chatbar{box-shadow:0 12px 32px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.07)}
+.hint{border:1px solid var(--line)}
+.avg-panel,.peer-card{box-shadow:0 18px 48px rgba(0,0,0,.55)}
 </style>
+<link rel="stylesheet" href="ui-a.css">
 </head>
 <body>
 <div id="app">
@@ -141,11 +144,10 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
 
   <header class="hud-top">
     <div class="pill brand">
-      <a class="exit" href="https://korulive.com/" aria-label="코루라이브로 돌아가기" title="코루라이브로 돌아가기">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M15 12H4"/><path d="M8 7.5 3.5 12 8 16.5"/></svg>
-      </a>
-      <span class="mark">코인 시부레</span>
-      <span class="count"><span class="dot" id="dot"></span><span id="count">연결 중</span></span>
+      <div class="brand-copy">
+        <span class="mark">코인 시부레</span>
+        <span class="count"><span class="dot" id="dot"></span><span id="count">연결 중</span></span>
+      </div>
     </div>
     <div class="right">
       <button type="button" class="pill avg-btn" id="avgBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="avgPanel">
@@ -156,17 +158,22 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
 
   <div class="avg-panel" id="avgPanel" role="dialog" aria-labelledby="avgTitle" hidden>
     <form id="avgForm" novalidate>
-      <p class="avg-title" id="avgTitle">내 평단</p>
-      <div class="seg" role="radiogroup" aria-label="종목">
-        <label><input type="radio" name="avgStock" value="BTC" id="avgBTC" checked><span>비트코인</span></label>
-        <label><input type="radio" name="avgStock" value="ETH" id="avgETH"><span>이더리움</span></label>
+      <div class="avg-heading">
+        <div><span class="avg-kicker">나의 이름표</span><p class="avg-title" id="avgTitle">내 평단 설정</p></div>
+        <button type="button" class="avg-close" id="avgClose" aria-label="평단 설정 닫기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
       </div>
-      <label class="avg-field" for="avgPrice"><input id="avgPrice" name="avgPrice" inputmode="numeric" autocomplete="off" enterkeyhint="done" aria-describedby="avgHint"><span>원</span></label>
+      <div class="seg" role="radiogroup" aria-label="종목">
+        <label><input type="radio" name="avgStock" value="BTC" id="avgBTC" checked><span><b>BTC</b><small>비트코인</small></span></label>
+        <label><input type="radio" name="avgStock" value="ETH" id="avgETH"><span><b>ETH</b><small>이더리움</small></span></label>
+      </div>
+      <label class="avg-field-label" for="avgPrice">평균 매수가</label>
+      <div class="avg-field"><input id="avgPrice" name="avgPrice" inputmode="numeric" autocomplete="off" enterkeyhint="done" aria-describedby="avgHint"><span>원</span></div>
       <p class="avg-hint" id="avgHint" aria-live="polite">만 원 단위 층으로 바꿔서 이름 위에 표시돼요. 150,000,000원이면 "비트 15,000층"이에요.</p>
       <div class="avg-actions">
-        <button type="button" class="ghost" id="avgClear">지우기</button>
-        <button type="submit" class="primary" id="avgSave">표시하기</button>
+        <button type="button" class="ghost" id="avgClear">표시 지우기</button>
+        <button type="submit" class="primary" id="avgSave">이름표에 표시</button>
       </div>
+      <details class="avg-source"><summary>시세 기준</summary><p>하이퍼리퀴드 BTC/USDC·ETH/USDC 무기한 선물 가격을 원화로 바꾼 값이며, 국내 거래소 시세와 달라요.</p></details>
     </form>
   </div>
 
@@ -193,7 +200,6 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font-ui
     <div class="gate-card" role="status" aria-live="polite">
       <p class="gate-title" id="gateTitle">객장이 꽉 찼어요</p>
       <p class="gate-text" id="gateText"></p>
-      <a class="gate-exit" href="https://korulive.com/">코루라이브로 돌아가기</a>
     </div>
   </div>
   <div class="fail" id="fail" hidden><p>3D 화면을 불러오지 못했어요.<br>브라우저 설정에서 하드웨어 가속(WebGL)이 켜져 있는지 확인해 주세요.</p></div>
@@ -386,7 +392,40 @@ function niceStep(raw){ const p = Math.pow(10, Math.floor(Math.log10(raw))), f =
    ------------------------------------------------------------------ */
 const LED = '"DotGothic16", ui-monospace, Menlo, monospace';
 const UI  = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
-const COL = { up:'#ff4d57', down:'#3f8cff', flat:'#c9c3b6', led:'#ffb547', live:'#3ad07a', muted:'#8f897d', grid:'rgba(236,231,220,0.09)', text:'#ece7dc', panel:'#0a0c0e', ink:'#050607', rule:'rgba(255,181,71,0.28)' };
+// 시안 A — 평양 객장: crimson walls, gold trim, red banners
+const THEME = {
+  led: '#f2c14e', rule: 'rgba(242,193,78,0.18)', frame: '#60452f',
+  sky: '#2a0b0d', fog: [26, 48],
+  hemi: [0xffe3cf, 0x3a0d0f, 0.78], key: [0xfff0da, 0.72], fill: [0xffd0c0, 0.22], boardLight: '#ffd9a0', reflect: 0.2,
+  room: {
+    floorRough: 0.5, floorMetal: 0.08,
+    floorDraw: (f, rnd, S) => {
+      // dark marble: soft blotches and pale veins, a thin grout line on two edges of each 2 m slab
+      f.fillStyle = '#2b2225'; f.fillRect(0, 0, S, S);
+      for (let i = 0; i < 60; i++){ const cx = rnd() * S, cy = rnd() * S, r = 40 + rnd() * 110, g = f.createRadialGradient(cx, cy, 0, cx, cy, r);
+        const col = rnd() < 0.5 ? '80,62,68' : '26,18,22'; g.addColorStop(0, 'rgba(' + col + ',' + (0.12 + rnd() * 0.12).toFixed(2) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
+        f.fillStyle = g; f.fillRect(cx - r, cy - r, r * 2, r * 2); }
+      f.strokeStyle = 'rgba(200,180,160,0.15)'; f.lineWidth = 1.3;
+      for (let i = 0; i < 16; i++){ f.beginPath(); let x = rnd() * S, y = rnd() * S; f.moveTo(x, y); for (let k = 0; k < 7; k++){ x += (rnd() - 0.5) * 170; y += (rnd() - 0.5) * 170; f.lineTo(x, y); } f.stroke(); }
+      f.fillStyle = '#181214'; f.fillRect(0, 0, S, 5); f.fillRect(0, 0, 5, S);
+      f.fillStyle = 'rgba(255,255,255,0.05)'; f.fillRect(5, 5, S - 5, 2); f.fillRect(5, 5, 2, S - 5);
+    },
+    wall: '#8f1d21', wallLow: '#4a0f12', bandH: 1.7, trim: '#c9a24f', ceil: '#3b1214', lamp: '#ffe4bd', pillar: '#6c1417',
+  },
+  bench: { seat: '#8a1a20', leg: '#b08a3e', rough: 0.7 },
+  sign: { bg: '#921c22', color: '#f8e3a8', border: '#b88c48' },
+  notice: { bg: 'transparent', color: '#f6dfac' },
+  signs: [
+    { side: -1, z: 1.5, lines: ['코인 과세', '결사반대!'] },
+    { side: -1, z: -4, w: 4.6, lines: ['위대한 떡상을 향하여', '총진군!'] },
+    { side: -1, z: 7, w: 4.6, lines: ['존버는', '승리한다'] },
+    { side: 1, z: 1.5, lines: ['투자의 책임은', '투자자 본인에게 있습니다'] },
+    { side: 1, z: -4, w: 4.6, lines: ['물타기는', '애국이다'] },
+    { side: 1, z: 7, w: 4.6, lines: ['오늘도', '풀매수'] },
+  ],
+  tag: { bg: 'rgba(38,14,18,0.95)', line: 'rgba(242,193,78,0.24)', text: '#f7edd9' },
+};
+const COL = { up:'#ff4d57', down:'#3f8cff', flat:'#c9c3b6', led:THEME.led, live:'#3ad07a', muted:'#b7a28f', grid:'rgba(236,231,220,0.08)', text:'#f7edd9', panel:'#1b1114', ink:'#120c0e', rule:THEME.rule };
 
 function rrect(x, X, Y, W, H, r){
   x.beginPath(); x.moveTo(X + r, Y); x.lineTo(X + W - r, Y); x.quadraticCurveTo(X + W, Y, X + W, Y + r);
@@ -418,7 +457,7 @@ const HD = 2;
 const bc = document.createElement('canvas'); bc.width = BW * HD; bc.height = BH * HD;
 const bx = bc.getContext('2d'); bx.setTransform(HD, 0, 0, HD, 0, 0);
 const boardDots = ledPattern(bx, 5, 0.22);
-const DISCLAIMER = '하이퍼리퀴드 BTC/USDC·ETH/USDC 무기한 선물 가격을 원화로 바꾼 값이며, 국내 거래소 시세와 달라요.';
+const ROOM_MOTTO = '★  동지여, 차트는 흔들려도 멘탈은 사수하라!  ★';
 let roomCount = 0, roomState = 'connecting';
 
 function drawPanel(x, ox, s, st, nowMs){
@@ -528,48 +567,31 @@ function drawBoard(){
   x.fillStyle = boardDots; x.fillRect(0, 0, BW, BH);
 }
 
-const TH = 80;
-const tc = document.createElement('canvas'); tc.height = TH * HD; tc.width = 2400 * HD;
+// A stationary five-part quote rail keeps prices readable without clipped scrolling text.
+const TH = 180;
+const tc = document.createElement('canvas'); tc.height = TH * HD; tc.width = BW * HD;
 const tx = tc.getContext('2d');
-const tickerDots = ledPattern(tx, 5, 0.22);
-function tickerParts(){
-  const parts = [];
-  const lbl = t => ({ t, f: '600 34px ' + UI, c: COL.led }), mut = t => ({ t, f: '500 30px ' + UI, c: COL.muted });
-  const num = (t, c) => ({ t, f: '42px ' + LED, c: c || COL.text }), gap = { t: '        ', f: '42px ' + LED, c: COL.ink };
-  // Upbit won prices: 비트코인 · 이더리움 · 테더, each with its 24 h change
-  parts.push(lbl('업비트 '));
-  [['BTC', '비트코인 '], ['ETH', '이더리움 '], ['USDT', '테더 ']].forEach(([k, name], i) => {
-    const u = U[k];
-    if (i) parts.push(mut('  ·  '));
-    parts.push(lbl(name));
-    if (u){
-      const d = signDir(u.pct);
-      parts.push(num(won(u.p), COL[d]), mut('원'));
-      if (u.pct != null) parts.push(mut(' '), num(arrow(d) + fmtPct(u.pct), COL[d]));
-    } else parts.push(num('–', COL.muted));
-  });
-  // 김프 for both coins
-  parts.push(gap, lbl('김프 '));
-  [['BTC', '비트 '], ['ETH', '이더 ']].forEach(([k, name], i) => {
-    const kp = kimp(k);
-    if (i) parts.push(mut('  ·  '));
-    parts.push(mut(name));
-    parts.push(kp ? num(arrow(kp.dir) + fmtPct(kp.pct), COL[kp.dir]) : num('–', COL.muted));
-  });
-  parts.push(gap);
-  return parts;
-}
 function drawTicker(){
-  const x = tx, parts = tickerParts();
-  let w = 40; for (const p of parts){ x.font = p.f; w += x.measureText(p.t).width; }
-  w = Math.ceil(w);
-  if (Math.abs(tc.width - w * HD) > 2){ tc.width = w * HD; }
-  x.setTransform(HD, 0, 0, HD, 0, 0);   // resizing the canvas resets the context
-  x.fillStyle = COL.ink; x.fillRect(0, 0, w, TH);
-  x.textBaseline = 'middle';
-  runs(x, parts, 40, 43);
-  x.textBaseline = 'alphabetic';
-  x.fillStyle = tickerDots; x.fillRect(0, 0, w, TH);
+  const x = tx, cellW = BW / 5;
+  x.setTransform(HD, 0, 0, HD, 0, 0);
+  x.clearRect(0, 0, BW, TH);
+  x.fillStyle = COL.panel; x.fillRect(0, 0, BW, TH);
+  const quotes = [['BTC', '비트코인'], ['ETH', '이더리움'], ['USDT', '테더']].map(([key, name]) => {
+    const q = U[key], dir = q ? signDir(q.pct) : 'flat';
+    return { title: name + ' · 업비트', value: q ? won(q.p) + '원' : '시세 대기', detail: q && q.pct != null ? arrow(dir) + ' ' + fmtPct(q.pct) : '국내 거래소 시세', dir };
+  });
+  for (const [key, name] of [['BTC', '비트코인'], ['ETH', '이더리움']]){
+    const premium = kimp(key);
+    quotes.push({ title: name + ' · 김프', value: premium ? fmtPct(premium.pct) : '—', detail: '국내 / 해외 가격 차이', dir: premium ? premium.dir : 'flat' });
+  }
+  quotes.forEach((quote, i) => {
+    const left = i * cellW + 30;
+    if (i){ x.fillStyle = COL.rule; x.fillRect(i * cellW, 28, 2, TH - 56); }
+    x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    x.font = '500 34px ' + UI; x.fillStyle = COL.muted; x.fillText(quote.title, left, 45);
+    x.font = '600 48px ' + UI; x.fillStyle = i < 3 ? COL.text : COL[quote.dir]; x.fillText(quote.value, left, 107, cellW - 60);
+    x.font = '500 32px ' + UI; x.fillStyle = i < 3 ? COL[quote.dir] : COL.muted; x.fillText(quote.detail, left, 153, cellW - 60);
+  });
 }
 
 /* ------------------------------------------------------------------
@@ -583,17 +605,23 @@ try {
   renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 } catch (e) { $('#fail').hidden = false; return; }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
 renderer.outputEncoding = T.sRGBEncoding;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new T.Scene();
-scene.background = new T.Color('#eef0f3');
-scene.fog = new T.Fog('#eef0f3', 28, 50);
+scene.background = new T.Color(THEME.sky);
+scene.fog = new T.Fog(THEME.sky, THEME.fog[0], THEME.fog[1]);
 const camera = new T.PerspectiveCamera(55, 1, 0.1, 120);
 
-scene.add(new T.HemisphereLight(0xffffff, 0xd6d9dd, 0.7));
-const keyLight = new T.DirectionalLight(0xffffff, 0.55); keyLight.position.set(4, 12, 8); scene.add(keyLight);
-const boardLight = new T.PointLight(0xffd9a0, 0.9, 30, 1.4); boardLight.position.set(0, 5.5, -7.2); scene.add(boardLight);
+scene.add(new T.HemisphereLight(THEME.hemi[0], THEME.hemi[1], THEME.hemi[2]));
+const keyLight = new T.DirectionalLight(THEME.key[0], THEME.key[1]); keyLight.position.set(5, 12, 7); scene.add(keyLight);
+// one soft shadow map over the whole floor
+keyLight.castShadow = true; keyLight.shadow.mapSize.set(2048, 2048);
+Object.assign(keyLight.shadow.camera, { left: -16, right: 16, top: 18, bottom: -18, near: 1, far: 40 });
+keyLight.shadow.bias = -0.0004; keyLight.shadow.normalBias = 0.03; keyLight.shadow.radius = 3;
+const fillLight = new T.DirectionalLight(THEME.fill[0], THEME.fill[1]); fillLight.position.set(-6, 8, 10); scene.add(fillLight);
+const boardLight = new T.PointLight(THEME.boardLight, 1.0, 30, 1.4); boardLight.position.set(0, 5.5, -7.2); scene.add(boardLight);
 
 function canvasTex(c, repeat){
   const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = maxAniso;
@@ -606,20 +634,19 @@ const ROOM = { x0: -11, x1: 11, z0: -10, z1: 14, h: 13 };
 const RW = ROOM.x1 - ROOM.x0, RD = ROOM.z1 - ROOM.z0, RZ = (ROOM.z0 + ROOM.z1) / 2;
 let floorMesh = null;
 (function buildRoom(){
-  const fc = document.createElement('canvas'); fc.width = fc.height = 256;
-  const f = fc.getContext('2d');
-  f.fillStyle = '#e8eaed'; f.fillRect(0, 0, 256, 256);
-  const chips = ['#dde0e4', '#d3d6da', '#f3f4f6', '#cbcfd4', '#e2e4e7']; let s = 7;
-  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 1400; i++){ f.fillStyle = chips[(rnd() * chips.length) | 0]; f.beginPath(); f.arc(rnd() * 256, rnd() * 256, rnd() * 1.8 + 0.4, 0, Math.PI * 2); f.fill(); }
-  f.fillStyle = '#cfd3d8'; f.fillRect(0, 0, 256, 3); f.fillRect(0, 0, 3, 256);
+  const R = THEME.room;
+  const fc = document.createElement('canvas'); fc.width = fc.height = 512;
+  const f = fc.getContext('2d'); let sd = 7;
+  const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  R.floorDraw(f, rnd, 512);
   const floorTex = canvasTex(fc, true); floorTex.repeat.set(RW / 2, RD / 2);
-  const floor = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ map: floorTex, roughness: 0.5, metalness: 0.06 }));
-  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, RZ); scene.add(floor);
+  const floor = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ map: floorTex, roughness: R.floorRough, metalness: R.floorMetal }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, RZ); floor.receiveShadow = true; scene.add(floor);
   floorMesh = floor;
 
-  const wallMat = new T.MeshStandardMaterial({ color: '#f4f5f7', roughness: 0.92 });
-  const woodMat = new T.MeshStandardMaterial({ color: '#d9dcdf', roughness: 0.7 });
+  const wallMat = new T.MeshStandardMaterial({ color: R.wall, roughness: 0.92 });
+  const lowMat = new T.MeshStandardMaterial({ color: R.wallLow, roughness: 0.78 });
+  const trimMat = new T.MeshStandardMaterial({ color: R.trim, roughness: 0.4, metalness: 0.55 });
   const walls = [
     { w: RW, pos: [0, ROOM.h / 2, ROOM.z0], ry: 0 },
     { w: RD, pos: [ROOM.x0, ROOM.h / 2, RZ], ry: Math.PI / 2 },
@@ -627,39 +654,47 @@ let floorMesh = null;
     { w: RW, pos: [0, ROOM.h / 2, ROOM.z1], ry: Math.PI },
   ];
   walls.forEach(d => {
-    const m = new T.Mesh(new T.PlaneGeometry(d.w, ROOM.h), wallMat); m.position.set(...d.pos); m.rotation.y = d.ry; scene.add(m);
-    const band = new T.Mesh(new T.PlaneGeometry(d.w, 1.1), woodMat);
+    const m = new T.Mesh(new T.PlaneGeometry(d.w, ROOM.h), wallMat); m.position.set(...d.pos); m.rotation.y = d.ry; m.receiveShadow = true; scene.add(m);
     const off = new T.Vector3(0, 0, 0.02).applyAxisAngle(new T.Vector3(0, 1, 0), d.ry);
-    band.position.set(d.pos[0] + off.x, 0.55, d.pos[2] + off.z); band.rotation.y = d.ry; scene.add(band);
+    // wainscot: a darker lower band with a thin metal rail on top
+    const band = new T.Mesh(new T.PlaneGeometry(d.w, R.bandH), lowMat);
+    band.position.set(d.pos[0] + off.x, R.bandH / 2, d.pos[2] + off.z); band.rotation.y = d.ry; scene.add(band);
+    const rail = new T.Mesh(new T.BoxGeometry(d.w, 0.05, 0.06), trimMat);
+    rail.position.set(d.pos[0] + off.x * 2.5, R.bandH + 0.025, d.pos[2] + off.z * 2.5); rail.rotation.y = d.ry; scene.add(rail);
   });
-  const ceil = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ color: '#f8f9fa', roughness: 1 }));
+  const ceil = new T.Mesh(new T.PlaneGeometry(RW, RD), new T.MeshStandardMaterial({ color: R.ceil, roughness: 1 }));
   ceil.rotation.x = Math.PI / 2; ceil.position.set(0, ROOM.h, RZ); scene.add(ceil);
-  const lampMat = new T.MeshBasicMaterial({ color: '#fff0d6' }), lampGeo = new T.PlaneGeometry(3.2, 0.32);
+  const lampMat = new T.MeshBasicMaterial({ color: R.lamp }), lampGeo = new T.PlaneGeometry(3.2, 0.32);
   for (const lx of [-6.5, 0, 6.5]) for (const lz of [-5, 0, 5, 10]){
     const l = new T.Mesh(lampGeo, lampMat); l.rotation.x = Math.PI / 2; l.position.set(lx, ROOM.h - 0.02, lz); scene.add(l);
   }
-  const pilMat = new T.MeshStandardMaterial({ color: '#e4e7ea', roughness: 0.85 }), pilGeo = new T.BoxGeometry(0.5, ROOM.h, 0.3);
+  const pilMat = new T.MeshStandardMaterial({ color: R.pillar, roughness: 0.85 }), pilGeo = new T.BoxGeometry(0.5, ROOM.h, 0.3);
   // the bay between -1.5 and 4.5 is a little wider so the wall signs hang clear of the pillars
   for (const pz of [-6.5, -1.5, 4.5, 9.5, 13.6]) for (const sx of [-1, 1]){
-    const p = new T.Mesh(pilGeo, pilMat); p.position.set(sx * (ROOM.x1 - 0.15), ROOM.h / 2, pz); p.rotation.y = Math.PI / 2; scene.add(p);
+    const p = new T.Mesh(pilGeo, pilMat); p.position.set(sx * (ROOM.x1 - 0.15), ROOM.h / 2, pz); p.rotation.y = Math.PI / 2; p.receiveShadow = true; scene.add(p);
+    const base = new T.Mesh(new T.BoxGeometry(0.62, R.bandH + 0.08, 0.42), lowMat); base.position.set(sx * (ROOM.x1 - 0.15), (R.bandH + 0.08) / 2, pz); base.rotation.y = Math.PI / 2; scene.add(base);
   }
 })();
 
 function signTexture(text, w, h, font, color, bg){
   const c = document.createElement('canvas'); c.width = w * HD; c.height = h * HD;
   const x = c.getContext('2d'); x.setTransform(HD, 0, 0, HD, 0, 0); x.fillStyle = bg; x.fillRect(0, 0, w, h);
-  x.font = font; x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, h / 2 + 4);
+  x.font = font; x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle';
+  if (bg === 'transparent'){ x.shadowColor = 'rgba(35,7,10,.45)'; x.shadowBlur = 5; x.shadowOffsetY = 3; }
+  x.fillText(text, w / 2, h / 2 + 4);
   return canvasTex(c);
 }
-// two centered lines at the largest size where the longer one still fits the width
-function twoLineSign(lines, w, h, color, bg){
+// two centered lines at the largest size where the longer one still fits the width, in a banner style
+function twoLineSign(lines, w, h, st){
   const c = document.createElement('canvas'); c.width = w * HD; c.height = h * HD;
-  const x = c.getContext('2d'); x.setTransform(HD, 0, 0, HD, 0, 0); x.fillStyle = bg; x.fillRect(0, 0, w, h);
+  const x = c.getContext('2d'); x.setTransform(HD, 0, 0, HD, 0, 0); x.fillStyle = st.bg; x.fillRect(0, 0, w, h);
+  if (st.border){ x.strokeStyle = st.border; x.lineWidth = 3; x.strokeRect(22, 22, w - 44, h - 44); }
+  if (st.rule){ x.fillStyle = st.rule; x.fillRect(60, h - 36, w - 120, 4); }
   let fs = 140; x.font = '700 ' + fs + 'px ' + UI;
-  while (fs > 40 && Math.max(...lines.map(l => x.measureText(l).width)) > w - 110){ fs -= 2; x.font = '700 ' + fs + 'px ' + UI; }
-  x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle';
-  const gap = fs * 1.32;
-  lines.forEach((l, i) => x.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * gap + 4));
+  while (fs > 40 && Math.max(...lines.map(l => x.measureText(l).width)) > w - 150){ fs -= 2; x.font = '700 ' + fs + 'px ' + UI; }
+  x.fillStyle = st.color; x.textAlign = 'center'; x.textBaseline = 'middle';
+  const gap = fs * 1.3;
+  lines.forEach((l, i) => x.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * gap + 2));
   return canvasTex(c);
 }
 // a plaque sized to its text, in the same look as the side-wall notice
@@ -668,29 +703,28 @@ function fittedSign(text, font, color, bg, planeH, maxW){
   const cw = Math.ceil(m.measureText(text).width + 160), ch = 200;
   let w = planeH * cw / ch, h = planeH;
   if (w > maxW){ h *= maxW / w; w = maxW; }
-  return new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ map: signTexture(text, cw, ch, font, color, bg) }));
+  return new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ map: signTexture(text, cw, ch, font, color, bg), transparent: bg === 'transparent', depthWrite: bg !== 'transparent' }));
 }
 
-// front wall, bottom to top: two-panel board, KOSPI/FX tape, price notice
+// Front wall: charts, fixed domestic quote rail, and the room's playful motto.
 const BOARD = { w: 8.4 * BW / BH, h: 8.4, y: 5.4, z: -9.86 };
-const TICKER = { w: BOARD.w, h: 0.87, y: BOARD.y + BOARD.h / 2 + 0.91 };
-const NOTICE = { y: TICKER.y + 1.2, h: 0.87 };
+const TICKER = { w: BOARD.w, h: 1.18, y: BOARD.y + BOARD.h / 2 + 0.86 };
+const NOTICE = { y: TICKER.y + 1.25, h: 0.88 };
 
 const signs = [];
 function buildSigns(){
   signs.forEach(s => { scene.remove(s); s.material.map.dispose(); s.material.dispose(); });
   signs.length = 0;
-  // left wall: green protest sign, two lines sized to the bay
-  const a = new T.Mesh(new T.PlaneGeometry(5.0, 5.0 * 420 / 1024), new T.MeshBasicMaterial({
-    map: twoLineSign(['대한민국 코인 과세', '반대합니다'], 1024, 420, '#eef5e8', '#2f6b2a') }));
-  a.position.set(ROOM.x0 + 0.07, 6.6, 1.5); a.rotation.y = Math.PI / 2;
-  // two lines, as large as the bay between the pillars allows
-  const b = new T.Mesh(new T.PlaneGeometry(5.0, 5.0 * 420 / 1024), new T.MeshBasicMaterial({
-    map: twoLineSign(['투자의 책임은', '투자자 본인에게 있습니다'], 1024, 420, '#ece7dc', '#16191b') }));
-  b.position.set(ROOM.x1 - 0.07, 6.6, 1.5); b.rotation.y = -Math.PI / 2;
-  const notice = fittedSign(DISCLAIMER, '600 76px ' + UI, '#ece7dc', '#16191b', NOTICE.h, BOARD.w);
+  // side-wall banners, one per bay between the pillars
+  for (const sg of THEME.signs){
+    const w = sg.w || 5.0, st = Object.assign({}, THEME.sign, sg.style || {});
+    const m = new T.Mesh(new T.PlaneGeometry(w, w * 420 / 1024), new T.MeshBasicMaterial({ map: twoLineSign(sg.lines, 1024, 420, st) }));
+    m.position.set(sg.side < 0 ? ROOM.x0 + 0.07 : ROOM.x1 - 0.07, sg.y || 6.6, sg.z); m.rotation.y = sg.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    signs.push(m);
+  }
+  const notice = fittedSign(ROOM_MOTTO, '700 82px ' + UI, THEME.notice.color, THEME.notice.bg, NOTICE.h, BOARD.w);
   notice.position.set(0, NOTICE.y, -9.95);
-  signs.push(a, b, notice); scene.add(a, b, notice);
+  signs.push(notice); scene.add(...signs);
 }
 buildSigns();
 
@@ -698,8 +732,8 @@ buildSigns();
 const boardTex = canvasTex(bc);
 const board = new T.Mesh(new T.PlaneGeometry(BOARD.w, BOARD.h), new T.MeshBasicMaterial({ map: boardTex }));
 board.position.set(0, BOARD.y, BOARD.z); scene.add(board);
-const frameMat = new T.MeshStandardMaterial({ color: '#0e0f10', roughness: 0.4, metalness: 0.6 });
-const boardFrame = new T.Mesh(new T.BoxGeometry(BOARD.w + 0.5, BOARD.h + 0.5, 0.24), frameMat);
+const frameMat = new T.MeshStandardMaterial({ color: THEME.frame, roughness: 0.35, metalness: 0.65 });
+const boardFrame = new T.Mesh(new T.BoxGeometry(BOARD.w + 0.14, BOARD.h + 0.14, 0.18), frameMat);
 boardFrame.position.set(0, BOARD.y, -9.99); scene.add(boardFrame);
 const gc = document.createElement('canvas'); gc.width = gc.height = 256;
 (function(){ const g = gc.getContext('2d'), grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
@@ -707,19 +741,28 @@ const gc = document.createElement('canvas'); gc.width = gc.height = 256;
   g.fillStyle = grd; g.fillRect(0, 0, 256, 256); })();
 const glowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: new T.Color('#ffb547'), transparent: true, opacity: 0.22, blending: T.AdditiveBlending, depthWrite: false });
 const glow = new T.Mesh(new T.PlaneGeometry(Math.min(RW - 0.4, BOARD.w + 6), BOARD.h + 5), glowMat); glow.position.set(0, BOARD.y, -9.98); scene.add(glow);
+// the board's light pooling on the floor in front of it: a soft additive gradient that fades out toward the benches
+const rc = document.createElement('canvas'); rc.width = 256; rc.height = 256;
+(function(){ const g = rc.getContext('2d'), v = g.createLinearGradient(0, 0, 0, 256);
+  v.addColorStop(0, 'rgba(255,255,255,1)'); v.addColorStop(0.35, 'rgba(255,255,255,0.45)'); v.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = v; g.fillRect(0, 0, 256, 256);
+  const hz = g.createLinearGradient(0, 0, 256, 0); hz.addColorStop(0, 'rgba(0,0,0,1)'); hz.addColorStop(0.2, 'rgba(0,0,0,0)'); hz.addColorStop(0.8, 'rgba(0,0,0,0)'); hz.addColorStop(1, 'rgba(0,0,0,1)');
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = hz; g.fillRect(0, 0, 256, 256); })();
+const reflMat = new T.MeshBasicMaterial({ map: canvasTex(rc), color: new T.Color('#ffb547'), transparent: true, opacity: THEME.reflect, blending: T.AdditiveBlending, depthWrite: false });
+const refl = new T.Mesh(new T.PlaneGeometry(BOARD.w + 2, 7), reflMat); refl.rotation.x = -Math.PI / 2; refl.position.set(0, 0.012, -9.8 + 3.5); refl.userData.noPick = true; scene.add(refl);
 
-const tickerTex = canvasTex(tc, true);
+const tickerTex = canvasTex(tc);
 const ticker = new T.Mesh(new T.PlaneGeometry(TICKER.w, TICKER.h), new T.MeshBasicMaterial({ map: tickerTex }));
 ticker.position.set(0, TICKER.y, -9.86); scene.add(ticker);
-const tframe = new T.Mesh(new T.BoxGeometry(TICKER.w + 0.3, TICKER.h + 0.24, 0.2), frameMat); tframe.position.set(0, TICKER.y, -9.99); scene.add(tframe);
+const tframe = new T.Mesh(new T.BoxGeometry(TICKER.w + 0.14, TICKER.h + 0.14, 0.18), frameMat); tframe.position.set(0, TICKER.y, -9.99); scene.add(tframe);
 
 // benches: 5 rows x 2 blocks, 4 seats each
 const SEAT_Y = 0.46;
 const ROWS = [-3.2, -1.6, 0, 1.6, 3.2], BLOCKS = [-3.4, 3.4], SLOT = [-1.875, -0.625, 0.625, 1.875];
 const seats = [], benches = [];
 ROWS.forEach(z => BLOCKS.forEach(bxp => { const bi = benches.length; benches.push({ x: bxp, z }); SLOT.forEach(o => seats.push({ x: bxp + o, z, bench: bi })); }));
-const seatMesh = new T.InstancedMesh(new T.BoxGeometry(5.2, 0.1, 0.52), new T.MeshStandardMaterial({ color: '#ffffff', roughness: 0.62 }), benches.length);
-const legMesh = new T.InstancedMesh(new T.BoxGeometry(0.12, SEAT_Y - 0.05, 0.42), new T.MeshStandardMaterial({ color: '#9ea3a9', roughness: 0.5, metalness: 0.5 }), benches.length * 2);
+const seatMesh = new T.InstancedMesh(new T.BoxGeometry(5.2, 0.12, 0.56), new T.MeshStandardMaterial({ color: '#ffffff', roughness: THEME.bench.rough }), benches.length);
+const legMesh = new T.InstancedMesh(new T.BoxGeometry(0.12, SEAT_Y - 0.05, 0.42), new T.MeshStandardMaterial({ color: THEME.bench.leg, roughness: 0.35, metalness: 0.6 }), benches.length * 2);
 const mtx = new T.Matrix4();
 benches.forEach((b, i) => {
   mtx.makeTranslation(b.x, SEAT_Y - 0.05, b.z); seatMesh.setMatrixAt(i, mtx);
@@ -729,13 +772,14 @@ benches.forEach((b, i) => {
 seatMesh.instanceMatrix.needsUpdate = true; legMesh.instanceMatrix.needsUpdate = true;
 // seats facing the board: light gray on both blocks,
 // each bench a touch lighter or darker so the rows read as real upholstery rather than flat paint
-const SEAT_UP = new T.Color('#c3c7cc').convertSRGBToLinear(), SEAT_DOWN = new T.Color('#c3c7cc').convertSRGBToLinear();
+const SEAT_UP = new T.Color(THEME.bench.seat).convertSRGBToLinear(), SEAT_DOWN = new T.Color(THEME.bench.seat).convertSRGBToLinear();
 const seatTint = new T.Color();
 benches.forEach((b, i) => {
   seatTint.copy(b.x > 0 ? SEAT_UP : SEAT_DOWN).multiplyScalar(0.92 + ((i * 37) % 9) / 50);
   seatMesh.setColorAt(i, seatTint);
 });
 seatMesh.instanceColor.needsUpdate = true;
+seatMesh.castShadow = seatMesh.receiveShadow = true; legMesh.castShadow = true;
 scene.add(seatMesh, legMesh);
 
 const marker = new T.Mesh(new T.RingGeometry(0.26, 0.34, 40), new T.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0, depthWrite: false }));
@@ -757,9 +801,9 @@ const SPH = new T.SphereGeometry(1, 28, 20);
 const DOME = new T.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
 const LIMB = new T.CylinderGeometry(0.045, 0.038, 1, 10);
 const BOX = new T.BoxGeometry(1, 1, 1);
-const SKIN = '#f1cfae';
+const SKIN = '#f3d3b4';
 const skinMat = new T.MeshStandardMaterial({ color: SKIN, roughness: 0.55 });
-const hairMat = new T.MeshStandardMaterial({ color: '#0a0806', roughness: 0.86 });
+const hairMat = new T.MeshStandardMaterial({ color: '#050403', roughness: 0.8 });
 const darkMat = new T.MeshStandardMaterial({ color: '#0d0c0b', roughness: 0.3 });
 const shoeMat = new T.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.25, metalness: 0.2 });
 const denimMat = new T.MeshStandardMaterial({ color: '#a9c4de', roughness: 0.9 });
@@ -768,7 +812,7 @@ const bagMat = new T.MeshStandardMaterial({ color: '#151515', roughness: 0.6 });
 const whiteMat = new T.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.5 });
 const redMat = new T.MeshStandardMaterial({ color: '#d8232a', roughness: 0.45 });
 const phoneMat = new T.MeshStandardMaterial({ color: '#ff7b2a', roughness: 0.35 });
-const shadowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: '#000000', transparent: true, opacity: 0.55, depthWrite: false });
+const shadowMat = new T.MeshBasicMaterial({ map: canvasTex(gc), color: '#000000', transparent: true, opacity: 0.26, depthWrite: false });
 const SHADOW_GEO = new T.PlaneGeometry(1.3, 1.3);
 const HIP = 0.74, THIGH = 0.37, SHIN = 0.36;
 
@@ -831,7 +875,7 @@ const HAIR_KIM = shaped(v => {
   squarify(v, 6.0);
   const taper = 1 + 0.14 * v.y;
   v.x *= taper; v.z *= taper;
-  if (v.y > 0) v.y *= 0.55;
+  if (v.y > 0) v.y *= 0.5 + 0.42 * smooth(-0.6, 1, v.z);   // flat top that climbs toward the swept-up front
 }, 32, 20);
 // a transparent decal (logo, letter) on a small plane
 function decal(draw, w, h, pw, ph){
@@ -846,15 +890,21 @@ function faceTexture(kind){
   const x = c.getContext('2d'), F = 256, kim = kind === 'kim';
   x.fillStyle = SKIN; x.fillRect(0, 0, 1024, 512);
   x.lineCap = 'round'; x.lineJoin = 'round';
-  const shade = (X, Y, rx, ry, a) => { x.fillStyle = 'rgba(150,95,70,' + a + ')'; x.beginPath(); x.ellipse(X, Y, rx, ry, 0, 0, Math.PI * 2); x.fill(); };
+  const shade = (X, Y, rx, ry, a, col) => { x.fillStyle = 'rgba(' + (col || '150,95,70') + ',' + a + ')'; x.beginPath(); x.ellipse(X, Y, rx, ry, 0, 0, Math.PI * 2); x.fill(); };
   if (kim){
-    // shaved sides and back: dark stubble under the hair block; the forehead stays clear
-    x.fillStyle = 'rgba(45,38,34,0.55)';
-    x.fillRect(0, 30, F - 130, 165); x.fillRect(F + 130, 30, 1024 - F - 130, 165);
-    x.fillStyle = 'rgba(45,38,34,0.22)'; x.fillRect(F - 130, 30, 260, 50);
-    // full cheeks, jowls and a double chin
-    shade(F - 112, 304, 42, 36, 0.16); shade(F + 112, 304, 42, 36, 0.16);
-    shade(F, 392, 124, 24, 0.22); shade(F, 360, 74, 10, 0.12);
+    // the lower face a touch warmer and darker, so the jowls read even in flat light
+    const g = x.createLinearGradient(0, 220, 0, 512); g.addColorStop(0, 'rgba(160,100,70,0)'); g.addColorStop(1, 'rgba(160,100,70,0.2)');
+    x.fillStyle = g; x.fillRect(0, 220, 1024, 292);
+    // the high fade: shaved sides and back in blue-gray stubble, fading out under the hair block; the forehead stays clear
+    x.fillStyle = 'rgba(54,50,56,0.6)';
+    x.fillRect(0, 0, F - 120, 150); x.fillRect(F + 120, 0, 1024 - F - 120, 150);
+    const fade = x.createLinearGradient(0, 150, 0, 215); fade.addColorStop(0, 'rgba(54,50,56,0.6)'); fade.addColorStop(1, 'rgba(54,50,56,0)');
+    x.fillStyle = fade; x.fillRect(0, 150, F - 120, 65); x.fillRect(F + 120, 150, 1024 - F - 120, 65);
+    // round warm cheeks, jowls, and a double chin with its crease
+    shade(F - 98, 296, 52, 34, 0.2, '225,120,100'); shade(F + 98, 296, 52, 34, 0.2, '225,120,100');
+    shade(F - 120, 322, 44, 40, 0.14); shade(F + 120, 322, 44, 40, 0.14);
+    shade(F, 402, 140, 26, 0.26); shade(F, 368, 84, 12, 0.14);
+    x.strokeStyle = 'rgba(120,80,60,0.42)'; x.lineWidth = 4; x.beginPath(); x.moveTo(F - 72, 386); x.quadraticCurveTo(F, 406, F + 72, 386); x.stroke();
   } else {
     // dark short hair under the cap line, sideburns
     x.fillStyle = '#1a1512';
@@ -863,46 +913,44 @@ function faceTexture(kind){
     for (const sd of [1, -1]) x.fillRect(F + sd * 150 - (sd > 0 ? 0 : 26), 190, 26, 70);
     shade(F, 368, 48, 18, 0.14);
   }
-  // brows: thick, straight and low for kim; softer arcs for the hype kid
-  x.strokeStyle = '#231b17'; x.lineWidth = kim ? 11 : 9;
+  // brows: thick, straight, low and close for kim (inner ends a little lower); softer arcs for the hype kid
+  x.strokeStyle = '#1d1511'; x.lineWidth = kim ? 14 : 9;
   for (const sd of [1, -1]){
     x.beginPath();
-    if (kim){ x.moveTo(F + sd * 28, 221); x.lineTo(F + sd * 88, 217); }
+    if (kim){ x.moveTo(F + sd * 24, 227); x.lineTo(F + sd * 96, 215); }
     else { x.moveTo(F + sd * 32, 210); x.quadraticCurveTo(F + sd * 66, 198, F + sd * 98, 208); }
     x.stroke();
   }
-  // eyes: small and narrow, heavy upper lids for kim
+  // eyes: narrow slits with heavy upper lids and a slight upward tilt at the outer corner for kim
   for (const sd of [1, -1]){
-    const ex = F + sd * (kim ? 58 : 64), ey = kim ? 246 : 240;
-    x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(ex, ey, kim ? 18 : 20, kim ? 4.5 : 8, 0, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#1a1411'; x.beginPath(); x.ellipse(ex + sd * 2, ey + 0.5, kim ? 6 : 8.5, kim ? 4 : 8, 0, 0, Math.PI * 2); x.fill();
-    x.strokeStyle = '#2a211c'; x.lineWidth = kim ? 4 : 3; x.beginPath();
-    x.moveTo(ex - sd * (kim ? 19 : 22), ey - 1); x.quadraticCurveTo(ex, ey - (kim ? 5 : 11), ex + sd * (kim ? 19 : 22), ey + 2); x.stroke();
-    if (kim){ x.strokeStyle = 'rgba(120,80,60,0.45)'; x.lineWidth = 3; x.beginPath(); x.moveTo(ex - sd * 18, ey + 10); x.quadraticCurveTo(ex, ey + 16, ex + sd * 18, ey + 10); x.stroke(); }
+    const ex = F + sd * (kim ? 60 : 64), ey = kim ? 250 : 240, tilt = kim ? -sd * 0.14 : 0;
+    x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(ex, ey, kim ? 21 : 20, kim ? 5.5 : 8, tilt, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#1a1411'; x.beginPath(); x.ellipse(ex + sd * 1, ey + 0.5, kim ? 7 : 8.5, kim ? 5 : 8, 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#2a211c'; x.lineWidth = kim ? 5 : 3; x.beginPath();
+    x.moveTo(ex - sd * (kim ? 22 : 22), ey + (kim ? 1 : -1)); x.quadraticCurveTo(ex, ey - (kim ? 6 : 11), ex + sd * (kim ? 22 : 22), ey + (kim ? -2 : 2)); x.stroke();
+    if (kim){ x.strokeStyle = 'rgba(120,80,60,0.42)'; x.lineWidth = 3; x.beginPath(); x.moveTo(ex - sd * 19, ey + 11); x.quadraticCurveTo(ex, ey + 18, ex + sd * 19, ey + 10); x.stroke(); }
   }
-  // glasses: thin rimless-looking rectangles (kim) or chunky black frames (hype)
-  x.strokeStyle = kim ? 'rgba(45,40,38,0.85)' : '#111111'; x.lineWidth = kim ? 3 : 11;
-  if (kim){
-    for (const sd of [1, -1]){ rrect(x, F + sd * 58 - 44, 226, 88, 38, 6); x.stroke(); }
-    x.beginPath(); x.moveTo(F - 14, 240); x.lineTo(F + 14, 240); x.stroke();
-    x.beginPath(); x.moveTo(F - 102, 240); x.lineTo(F - 140, 234); x.moveTo(F + 102, 240); x.lineTo(F + 140, 234); x.stroke();
-  } else {
+  // glasses: chunky black frames (hype only)
+  if (!kim){
+    x.strokeStyle = '#111111'; x.lineWidth = 11;
     for (const sd of [1, -1]){ rrect(x, F + sd * 64 - 52, 214, 104, 58, 10); x.stroke(); }
     x.beginPath(); x.moveTo(F - 12, 240); x.lineTo(F + 12, 240); x.stroke();
     x.beginPath(); x.moveTo(F - 116, 236); x.lineTo(F - 152, 228); x.moveTo(F + 116, 236); x.lineTo(F + 152, 228); x.stroke();
   }
-  // nose: broader for kim
-  x.strokeStyle = 'rgba(120,80,60,0.5)'; x.lineWidth = 4; x.beginPath(); x.moveTo(F - 8, 254); x.quadraticCurveTo(F - 18, 286, F - 4, 294); x.stroke();
+  // nose: a broad, short nose for kim with wide nostrils
+  x.strokeStyle = 'rgba(120,80,60,0.5)'; x.lineWidth = 4; x.beginPath(); x.moveTo(F - 8, 256); x.quadraticCurveTo(F - 20, 288, F - 6, 298); x.stroke();
   x.fillStyle = 'rgba(120,80,60,0.5)';
-  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * (kim ? 17 : 14), 294, kim ? 8 : 7, 4, 0, 0, Math.PI * 2); x.fill(); }
-  // mouth
-  x.strokeStyle = '#8a4a44'; x.lineWidth = kim ? 4 : 5; x.beginPath();
-  if (kim){ x.moveTo(F - 34, 328); x.quadraticCurveTo(F, 338, F + 34, 328); }
+  for (const sd of [1, -1]){ x.beginPath(); x.ellipse(F + sd * (kim ? 19 : 14), kim ? 298 : 294, kim ? 9 : 7, kim ? 4.5 : 4, 0, 0, Math.PI * 2); x.fill(); }
+  // mouth: small and pursed for kim, with a lighter lower lip
+  x.strokeStyle = '#8a4a44'; x.lineWidth = kim ? 5 : 5; x.beginPath();
+  if (kim){ x.moveTo(F - 28, 334); x.quadraticCurveTo(F, 346, F + 28, 334); }
   else { x.moveTo(F - 28, 328); x.quadraticCurveTo(F, 334, F + 28, 328); }
   x.stroke();
   if (kim){
-    x.strokeStyle = 'rgba(120,80,60,0.35)'; x.lineWidth = 4;
-    for (const sd of [1, -1]){ x.beginPath(); x.moveTo(F + sd * 28, 296); x.quadraticCurveTo(F + sd * 60, 322, F + sd * 50, 344); x.stroke(); }
+    x.strokeStyle = 'rgba(214,130,120,0.55)'; x.lineWidth = 6; x.beginPath(); x.moveTo(F - 20, 345); x.quadraticCurveTo(F, 356, F + 20, 345); x.stroke();
+    // nasolabial folds
+    x.strokeStyle = 'rgba(120,80,60,0.34)'; x.lineWidth = 4;
+    for (const sd of [1, -1]){ x.beginPath(); x.moveTo(F + sd * 30, 300); x.quadraticCurveTo(F + sd * 62, 326, F + sd * 50, 350); x.stroke(); }
   } else {
     // moustache and goatee shadow
     x.fillStyle = 'rgba(35,28,24,0.28)';
@@ -953,6 +1001,13 @@ function makeFigure(kind, hex, isMe){
       body.add(ball(0.009, darkMat, 0.15 * side, hip + 0.415, frontZ(t, hip + 0.415) + 0.01));
       body.add(box(0.13, 0.04, 0.012, top, 0.19 * side, hip + 0.03, frontZ(t, hip + 0.03) + 0.002));
     }
+    // the red lapel badge, over the left chest pocket
+    const badge = decal(x => {
+      x.fillStyle = '#c8102e'; rrect(x, 8, 14, 112, 76, 12); x.fill();
+      x.strokeStyle = '#f2c14e'; x.lineWidth = 7; rrect(x, 8, 14, 112, 76, 12); x.stroke();
+      x.fillStyle = '#f2c14e'; x.beginPath(); x.arc(64, 52, 17, 0, Math.PI * 2); x.fill();
+    }, 128, 104, 0.052, 0.042);
+    badge.position.set(0.14, hip + 0.49, frontZ(t, hip + 0.49) + 0.008); body.add(badge);
   } else {
     const t = torso([[0.001, hip - 0.06], [0.31, hip - 0.05], [0.36, hip + 0.03], [0.4, hip + 0.15], [0.39, hip + 0.32], [0.35, hip + 0.45], [0.26, hip + 0.55], [0.12, hip + 0.61], [0.001, hip + 0.63]], top, 0.74);
     body.add(t);
@@ -986,11 +1041,13 @@ function makeFigure(kind, hex, isMe){
   const R = 0.165;
   const skull = new T.Mesh(kim ? HEAD_KIM : HEAD_HYPE, faceMat); skull.scale.setScalar(R); skull.position.set(0, 0.17, 0); face.add(skull);
   face.add(ball(kim ? 0.024 : 0.022, skinMat, 0, kim ? 0.152 : 0.158, kim ? 0.162 : 0.165, 1.1, 0.8, 0.9));   // nose tip
-  for (const side of [1, -1]) face.add(ball(0.03, skinMat, (kim ? 0.188 : 0.172) * side, 0.165, -0.01, 0.5, 1, 0.8));   // ears
-  for (const side of [1, -1]){ const tp = box(0.07, 0.006, 0.006, darkMat, (kim ? 0.15 : 0.14) * side, 0.21, 0.12); tp.rotation.y = -1.1 * side; face.add(tp); }   // glasses temples
+  for (const side of [1, -1]) face.add(ball(kim ? 0.036 : 0.03, skinMat, (kim ? 0.19 : 0.172) * side, 0.16, -0.012, 0.5, 1.05, 0.8));   // ears
+  if (!kim) for (const side of [1, -1]){ const tp = box(0.07, 0.006, 0.006, darkMat, 0.14 * side, 0.21, 0.12); tp.rotation.y = -1.1 * side; face.add(tp); }   // glasses temples
   if (kim){
     // the cut: a trapezoid block of hair standing on a high shaved line, longer front-to-back, with a swept-up front
-    const hair = new T.Mesh(HAIR_KIM, hairMat); hair.scale.set(0.168, 0.15, 0.158); hair.position.set(0, 0.285, -0.012); hair.rotation.x = 0.07; face.add(hair);
+    const hair = new T.Mesh(HAIR_KIM, hairMat); hair.scale.set(0.174, 0.162, 0.164); hair.position.set(0, 0.292, -0.01); hair.rotation.x = 0.06; face.add(hair);
+    // a faint side parting groove across the top of the block
+    const part = box(0.004, 0.012, 0.12, new T.MeshStandardMaterial({ color: '#1c1714', roughness: 0.9 }), 0.04, 0.382, -0.02); part.rotation.y = 0.12; face.add(part);
   } else {
     // black cap: dome, band, half-disc brim and a white S on the front
     const dome = new T.Mesh(DOME, capMat); dome.scale.set(0.186, 0.17, 0.186); dome.position.set(0, 0.235, 0); face.add(dome);
@@ -1005,20 +1062,24 @@ function makeFigure(kind, hex, isMe){
     const ring = new T.Mesh(new T.RingGeometry(0.46, 0.52, 40), new T.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0.85, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.016; g.add(ring);
   }
+  body.traverse(m => { if (m.isMesh && !m.material.transparent) m.castShadow = true; });
   return { g, body, head, abd, hip, legL: legs[0], legR: legs[1], kneeL: knees[0], kneeR: knees[1], armL: arms[0], armR: arms[1], eyes: [], mats: [top, faceMat] };
 }
 
 function nameCanvas(name, isMe){
   const c = document.createElement('canvas'); c.width = 512; c.height = 112;
-  const x = c.getContext('2d'); x.font = '600 42px ' + UI; x.textBaseline = 'middle';
-  const tw = Math.min(x.measureText(name).width, 400), badge = isMe ? 58 : 0, w = tw + 44 + badge, X = (512 - w) / 2;
-  x.fillStyle = 'rgba(12,14,16,0.8)'; rrect(x, X, 18, w, 76, 38); x.fill();
+  const x = c.getContext('2d'), badge = isMe ? 62 : 0;
+  x.font = '600 40px ' + UI; x.textBaseline = 'middle';
+  const maxText = 460 - badge, tw = Math.min(x.measureText(name).width, maxText);
+  const w = Math.min(500, tw + 40 + badge), X = (512 - w) / 2;
+  x.fillStyle = THEME.tag.bg; rrect(x, X, 17, w, 78, 13); x.fill();
+  x.strokeStyle = THEME.tag.line; x.lineWidth = 2; rrect(x, X + 1, 18, w - 2, 76, 12); x.stroke();
   if (isMe){
-    x.fillStyle = '#ffb547'; x.beginPath(); x.arc(X + 43, 56, 21, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#16110a'; x.font = '700 26px ' + UI; x.textAlign = 'center'; x.fillText('나', X + 43, 57);
-    x.textAlign = 'left'; x.font = '600 42px ' + UI;
+    x.fillStyle = THEME.led; rrect(x, X + 12, 31, 48, 48, 8); x.fill();
+    x.fillStyle = '#281015'; x.font = '700 26px ' + UI; x.textAlign = 'center'; x.fillText('나', X + 36, 56);
   }
-  x.fillStyle = '#ece7dc'; x.fillText(name, X + 22 + badge, 58, 400);
+  x.textAlign = 'left'; x.font = '600 40px ' + UI; x.fillStyle = THEME.tag.text;
+  x.fillText(name, X + 20 + badge, 57, maxText);
   return c;
 }
 // 평단 chip above the name: "비트 15,000층", outlined red when the coin is above it, blue when below
@@ -1033,14 +1094,15 @@ function avgLabel(avg){ return STOCK_BY[avg.s].short + ' ' + won(floorOf(avg.p))
 function avgCanvas(avg, dir){
   const c = document.createElement('canvas'); c.width = 512; c.height = 96;
   const x = c.getContext('2d'), short = STOCK_BY[avg.s].short + ' ', price = won(floorOf(avg.p)) + '층';
-  x.font = '700 38px ' + UI; const w1 = x.measureText(short).width;
-  x.font = '600 38px ' + UI; const w2 = Math.min(x.measureText(price).width, 470 - w1);
-  const w = w1 + w2 + 40, X = (512 - w) / 2, tone = dir === 'up' ? COL.up : dir === 'down' ? COL.down : null;
-  x.fillStyle = 'rgba(12,14,16,0.84)'; rrect(x, X, 14, w, 68, 34); x.fill();
-  x.strokeStyle = tone || 'rgba(236,231,220,0.3)'; x.lineWidth = 3; rrect(x, X + 1.5, 15.5, w - 3, 65, 32.5); x.stroke();
-  x.textBaseline = 'middle';
-  x.font = '700 38px ' + UI; x.fillStyle = COL.led; x.fillText(short, X + 20, 50);
-  x.font = '600 38px ' + UI; x.fillStyle = tone || COL.text; x.fillText(price, X + 20 + w1, 50, w2);
+  x.font = '600 36px ' + UI;
+  const w1 = x.measureText(short).width, w2 = Math.min(x.measureText(price).width, 430 - w1);
+  const w = w1 + w2 + 52, X = (512 - w) / 2, tone = dir === 'up' ? COL.up : dir === 'down' ? COL.down : THEME.led;
+  x.fillStyle = THEME.tag.bg; rrect(x, X, 13, w, 70, 12); x.fill();
+  x.strokeStyle = THEME.tag.line; x.lineWidth = 2; rrect(x, X + 1, 14, w - 2, 68, 11); x.stroke();
+  x.fillStyle = tone; rrect(x, X + 10, 29, 5, 38, 2); x.fill();
+  x.textBaseline = 'middle'; x.font = '600 36px ' + UI;
+  x.fillStyle = THEME.tag.text; x.fillText(short, X + 26, 49);
+  x.fillStyle = tone; x.fillText(price, X + 26 + w1, 49, w2);
   return c;
 }
 // chat bubble over an ant: up to three lines, bottom-anchored so it always sits right above the name
@@ -1081,7 +1143,7 @@ class Avatar {
     this.p = makeFigure(o.kind || 'kim', BODY[this.color], this.isMe);
     this.g = this.p.g; scene.add(this.g);
     this.labelMat = new T.SpriteMaterial({ map: canvasTex(nameCanvas(o.name, this.isMe)), transparent: true, depthTest: false, depthWrite: false });
-    this.label = new T.Sprite(this.labelMat); this.label.scale.set(1.64, 0.36, 1); this.label.renderOrder = 10; this.g.add(this.label);
+    this.label = new T.Sprite(this.labelMat); this.label.scale.set(1.84, 0.40, 1); this.label.renderOrder = 10; this.g.add(this.label);
     this.chatMat = new T.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false, opacity: 0 });
     this.chatSprite = new T.Sprite(this.chatMat); this.chatSprite.scale.set(CHAT_W * 0.0032, CHAT_H * 0.0032, 1); this.chatSprite.visible = false; this.chatSprite.renderOrder = 11; this.g.add(this.chatSprite);
     this.chatText = null; this.chatAt = 0; this.chatUntil = 0;
@@ -1172,8 +1234,8 @@ class Avatar {
 /* ------------------------------------------------------------------
    Me
    ------------------------------------------------------------------ */
-const ADJ = ['존버하는', '물타는', '느긋한', '설레는', '침착한', '단타치는', '졸린', '꼼꼼한', '배고픈', '조용한', '성실한', '떨리는'];
-const NOUN = ['개미', '일개미', '왕개미', '불개미', '동학개미', '서학개미'];
+const ADJ = ['존버하는', '물타는', '풀매수한', '단타치는', '숏친', '롱잡은', '청산당한', '익절한', '손절한', '졸린', '배고픈', '떨리는', '침착한', '느긋한', '설레는', '꼼꼼한', '조용한', '핵존버', '떡상기원', '한강뷰'];
+const NOUN = ['김정은'];
 function saveMe(){ try { localStorage.setItem('gaemi-me', JSON.stringify(me)); } catch (e) {} }
 // the room server accepts exactly these names (worker/src/gaekjang.ts keeps the same two lists)
 const NAMES = new Set(ADJ.flatMap(a => NOUN.map(n => a + ' ' + n)));
@@ -1203,6 +1265,10 @@ function wrapA(a){ const t = Math.PI * 2; return ((a + Math.PI) % t + t) % t - M
 const keys = new Set();
 const SPEED = 3.2;
 let camYaw = 0, camPitch = 0.2, camDist = 7.4;
+// ?cam=yaw,pitch,dist starts the camera somewhere else (used for screenshots)
+let camLookY = null;
+(function(){ const q = new URLSearchParams(location.search).get('cam'); if (!q) return; const [y, p, d, l] = q.split(',').map(Number);
+  if (isFinite(y)) camYaw = y; if (isFinite(p)) camPitch = clampRoom(p, -0.05, 0.95); if (isFinite(d)) camDist = clampRoom(d, 1.2, 16); if (isFinite(l)) camLookY = l; })();
 function updatePlayer(dt){
   let f = 0, s = 0;
   if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
@@ -1240,7 +1306,7 @@ function updatePlayer(dt){
 const camPos = new T.Vector3(player.x, 3.4, player.z + 6), camLook = new T.Vector3(player.x, 2.4, player.z);
 const wantPos = new T.Vector3(), wantLook = new T.Vector3();
 // portrait phones get a wider lens so the full board width fits from the benches
-function baseFov(){ return camera.aspect < 0.8 ? 76 : 55; }
+function baseFov(){ return camera.aspect < 0.8 ? 86 : 55; }
 function updateCamera(dt){
   const wantFov = baseFov();
   const hy = player.sitting ? 1.25 : 1.5;
@@ -1251,7 +1317,7 @@ function updateCamera(dt){
   wantPos.x = clampRoom(wantPos.x, ROOM.x0 + 0.3, ROOM.x1 - 0.3);
   wantPos.z = clampRoom(wantPos.z, ROOM.z0 + 0.5, ROOM.z1 - 0.3);
   wantPos.y = clampRoom(wantPos.y, 0.6, ROOM.h - 0.4);
-  wantLook.set(player.x, hy + 1.75, player.z);
+  wantLook.set(player.x, camLookY != null ? camLookY : hy + 1.75, player.z);
   const k = 1 - Math.exp(-dt * 6);
   camPos.lerp(wantPos, k); camLook.lerp(wantLook, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
@@ -1383,6 +1449,7 @@ function applyMyAvg(avg){
   sendState(true);
 }
 avgBtn.addEventListener('click', () => (avgPanel.hidden ? openAvg() : closeAvg(false)));
+$('#avgClose').addEventListener('click', () => closeAvg(true));
 // after picking the stock, go straight to the price
 avgForm.addEventListener('change', e => { if (e.target.name === 'avgStock'){ avgPlaceholder(); previewHint(); avgPrice.focus({ preventScroll: true }); } });
 // keep only digits and show thousands separators while typing
@@ -1596,8 +1663,8 @@ function openPeer(id){
   peerName.textContent = av.name;
   const done = isHidden(av);
   const said = !done && av.lastLine ? '마지막으로 한 말: "' + av.lastLine + '"\n' : '';
-  peerNote.textContent = !av.sk ? '' : done ? '차단한 개미예요. 이 개미가 하는 말은 내 화면에 안 보여요.'
-    : said + '차단하면 이 개미가 하는 말이 내 화면에서 계속 안 보여요. 상대는 알 수 없어요.';
+  peerNote.textContent = !av.sk ? '' : done ? '차단한 사람이에요. 이 사람이 하는 말은 내 화면에 안 보여요.'
+    : said + '차단하면 이 사람이 하는 말이 내 화면에서 계속 안 보여요. 상대는 알 수 없어요.';
   peerBlock.textContent = done ? '차단 풀기' : '차단하기';
   peerBlock.className = done ? 'ghost' : 'danger';
   peerBlock.hidden = !av.sk;   // no speaker key → this ant can't chat, nothing to block
@@ -1611,10 +1678,10 @@ peerBlock.addEventListener('click', () => {
   if (av && av.sk){
     if (blockedSk.has(av.sk)){
       blockedSk.delete(av.sk); saveBlocks();
-      toast('차단을 풀었어요. 이제 이 개미가 하는 말이 보여요.');
+      toast('차단을 풀었어요. 이제 이 사람이 하는 말이 보여요.');
     } else {
       blockedSk.add(av.sk); saveBlocks(); av.hush();
-      toast('차단했어요. 이 개미가 하는 말은 이제 안 보여요.');
+      toast('차단했어요. 이 사람이 하는 말은 이제 안 보여요.');
     }
   }
   closePeer();
@@ -1623,7 +1690,7 @@ document.addEventListener('pointerdown', e => { if (!peerCard.hidden && !peerCar
 
 function cleanName(v){
   const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 16) : '';
-  return s || '이름 없는 개미';
+  return s || '이름 없는 김정은';
 }
 function num(v, a, b, d){ return typeof v === 'number' && isFinite(v) ? Math.max(a, Math.min(b, v)) : d; }
 function int(v, n){ return Number.isInteger(v) ? ((v % n) + n) % n : 0; }
@@ -1683,7 +1750,7 @@ function onHello(m){
   if (Number.isInteger(m.room)) roomNo = m.room;
   retryN = 0; sent = null;
   unblock();
-  clearTimeout(clearT); clearTimeout(soloT);
+  clearTimeout(clearT); clearTimeout(soloT); soloT = 0;
   const here = new Set();
   if (Array.isArray(m.peers)) for (const p of m.peers){
     const av = upsertPeer(p);
@@ -1780,8 +1847,8 @@ function lostRoom(){
   clearT = setTimeout(() => { if (!isOpen()) clearPeers(); }, 15000);
 }
 function armSolo(){
-  clearTimeout(soloT);
-  soloT = setTimeout(() => { if (!isOpen() && roomState === 'connecting') setRoom('solo'); }, SOLO_AFTER_MS);
+  if (soloT) return;
+  soloT = setTimeout(() => { soloT = 0; if (!isOpen() && roomState === 'connecting') setRoom('solo'); }, SOLO_AFTER_MS);
 }
 // 1s, 2s, 4s … up to 30s, with jitter so a server restart isn't hit by everyone at once
 function scheduleRetry(ms){
@@ -1848,7 +1915,9 @@ class Npc {
     av.update(dt, t);
   }
 }
-const npcs = [new Npc(new Avatar({ name: '동네 힙스터', color: 0, kind: 'hype', x: 7.3, z: 5.6, r: Math.PI }), 3)];
+// Temporary visibility switch: keep the character available without creating its model or labels.
+const SHOW_HIPSTER = false;
+const npcs = SHOW_HIPSTER ? [new Npc(new Avatar({ name: '동네 힙스터', color: 0, kind: 'hype', x: 7.3, z: 5.6, r: Math.PI }), 3)] : [];
 function updateNpcs(dt, t){ for (const n of npcs) n.update(dt, t); }
 
 function updateOthers(dt, t){
@@ -1907,10 +1976,10 @@ function frame(now){
   if (sec !== lastSec){
     lastSec = sec;
     drawTicker(); tickerTex.needsUpdate = true;
-    tickerTex.repeat.x = (TICKER.w / TICKER.h) / (tc.width / tc.height);
+
   }
-  tickerTex.offset.x = (tickerTex.offset.x + dt * (reduceMotion ? 0.012 : 0.04)) % 1;
-  glowMat.color.lerp(glowTarget, 1 - Math.exp(-dt * 2));
+
+  glowMat.color.lerp(glowTarget, 1 - Math.exp(-dt * 2)); reflMat.color.copy(glowMat.color);
   boardLight.color.copy(lightBase).lerp(glowTarget, 0.35);
 
   updatePlayer(dt);
